@@ -14,7 +14,11 @@ export type MessageRole =
   | 'info'
   | 'warning'
   | 'plan'
-  | 'auth-request';
+  | 'auth-request'
+  | 'intent-picker'
+  | 'handoff-review'
+  | 'extraction-progress'
+  | 'phase-indicator';
 
 /**
  * Credential input modes for different auth types
@@ -181,6 +185,20 @@ export interface Message {
   ultrathink?: boolean;
   // Plan-specific fields (for role='plan')
   planPath?: string;  // Path to the plan markdown file
+  // Intent-picker fields (for role='intent-picker')
+  intentOptions?: string[];  // Options to display (e.g., ['feature', 'fix', 'continue', 'explore', 'lost'])
+  intentSelected?: string;   // User's selection
+  // Handoff-review fields (for role='handoff-review')
+  handoffPayload?: {
+    decisions: Array<{ id: string; content: string; confidence: 'high' | 'medium' | 'low' }>;
+    files: Array<{ path: string; reason: string }>;
+    risks: Array<{ category: string; description: string; mitigation: string }>;
+  };
+  handoffEditable?: boolean;  // False after user proceeds
+  // Extraction-progress fields (for role='extraction-progress')
+  extractionPhase?: 'analyzing' | 'extracting' | 'validating';
+  // Phase-indicator fields (for role='phase-indicator')
+  currentPhase?: 'question' | 'brainstorm' | 'extracting' | 'handoff' | 'planning';
   // Auth-request-specific fields (for role='auth-request')
   authRequestId?: string;         // Unique ID for the auth request
   authRequestType?: AuthRequestType;
@@ -249,6 +267,20 @@ export interface StoredMessage {
   ultrathink?: boolean;
   // Plan-specific fields (for role='plan')
   planPath?: string;
+  // Intent-picker fields (for role='intent-picker')
+  intentOptions?: string[];
+  intentSelected?: string;
+  // Handoff-review fields (for role='handoff-review')
+  handoffPayload?: {
+    decisions: Array<{ id: string; content: string; confidence: 'high' | 'medium' | 'low' }>;
+    files: Array<{ path: string; reason: string }>;
+    risks: Array<{ category: string; description: string; mitigation: string }>;
+  };
+  handoffEditable?: boolean;
+  // Extraction-progress fields (for role='extraction-progress')
+  extractionPhase?: 'analyzing' | 'extracting' | 'validating';
+  // Phase-indicator fields (for role='phase-indicator')
+  currentPhase?: 'question' | 'brainstorm' | 'extracting' | 'handoff' | 'planning';
   // Auth-request-specific fields (for role='auth-request')
   authRequestId?: string;
   authRequestType?: AuthRequestType;

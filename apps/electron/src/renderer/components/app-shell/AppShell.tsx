@@ -491,6 +491,10 @@ function AppShellContent({
   const [sessionListWidth, setSessionListWidth] = React.useState(() => {
     return storage.get(storage.KEYS.sessionListWidth, 300)
   })
+  // Navigator panel (session list) visibility
+  const [isNavigatorVisible, setIsNavigatorVisible] = React.useState(() => {
+    return storage.get(storage.KEYS.navigatorVisible, true)
+  })
 
   // Right sidebar state (min 280, max 480)
   const [isRightSidebarVisible, setIsRightSidebarVisible] = React.useState(() => {
@@ -509,7 +513,8 @@ function AppShellContent({
   // This ensures we switch to overlay mode when inline right sidebar would compress content
   const MIN_INLINE_SPACE = 600 // 300px for right sidebar + 300px for center content
   const leftSidebarEffectiveWidth = isSidebarVisible ? sidebarWidth : 0
-  const OVERLAY_THRESHOLD = MIN_INLINE_SPACE + leftSidebarEffectiveWidth + sessionListWidth
+  const navigatorEffectiveWidth = isNavigatorVisible ? sessionListWidth : 0
+  const OVERLAY_THRESHOLD = MIN_INLINE_SPACE + leftSidebarEffectiveWidth + navigatorEffectiveWidth
   const shouldUseOverlay = windowWidth < OVERLAY_THRESHOLD
 
   const [isResizing, setIsResizing] = React.useState<'sidebar' | 'session-list' | 'right-sidebar' | null>(null)
@@ -1371,6 +1376,11 @@ function AppShellContent({
     storage.set(storage.KEYS.sidebarVisible, isSidebarVisible)
   }, [isSidebarVisible])
 
+  // Persist navigator panel visibility to localStorage
+  React.useEffect(() => {
+    storage.set(storage.KEYS.navigatorVisible, isNavigatorVisible)
+  }, [isNavigatorVisible])
+
   // Persist right sidebar visibility to localStorage
   React.useEffect(() => {
     storage.set(storage.KEYS.rightSidebarVisible, isRightSidebarVisible)
@@ -2194,8 +2204,14 @@ function AppShellContent({
           className="flex-1 overflow-hidden min-w-0 flex h-full"
           style={{ padding: PANEL_WINDOW_EDGE_SPACING, gap: PANEL_PANEL_SPACING / 2 }}
         >
-          {/* === SESSION LIST PANEL === (hidden in focused mode) */}
+          {/* === SESSION LIST PANEL === (hidden in focused mode, collapsible) */}
           {!isFocusedMode && (
+          <motion.div
+            initial={false}
+            animate={{ width: isNavigatorVisible ? sessionListWidth : 0 }}
+            transition={isResizing ? { duration: 0 } : springTransition}
+            className="h-full shrink-0 overflow-hidden"
+          >
           <div
             className="h-full flex flex-col min-w-0 bg-background shrink-0 shadow-middle overflow-hidden rounded-l-[14px] rounded-r-[10px]"
             style={{ width: sessionListWidth }}
@@ -2749,6 +2765,12 @@ function AppShellContent({
                       )}
                     />
                   )}
+                  {/* Collapse navigator panel button */}
+                  <HeaderIconButton
+                    icon={<PanelLeftRounded className="h-5 w-6" />}
+                    onClick={() => setIsNavigatorVisible(false)}
+                    tooltip="Close panel"
+                  />
                   {/* Add Skill button (only for skills mode) */}
                   {isSkillsNavigation(navState) && activeWorkspace && (
                     <EditPopover
@@ -2856,10 +2878,11 @@ function AppShellContent({
               </>
             )}
           </div>
+          </motion.div>
           )}
 
-          {/* Session List Resize Handle (hidden in focused mode) */}
-          {!isFocusedMode && (
+          {/* Session List Resize Handle (hidden in focused mode, hidden when navigator collapsed) */}
+          {!isFocusedMode && isNavigatorVisible && (
           <div
             ref={sessionListHandleRef}
             onMouseDown={(e) => { e.preventDefault(); setIsResizing('session-list') }}
@@ -2884,9 +2907,25 @@ function AppShellContent({
 
           {/* === MAIN CONTENT PANEL === */}
           <div className={cn(
-            "flex-1 overflow-hidden min-w-0 bg-foreground-2 shadow-middle",
+            "flex-1 overflow-hidden min-w-0 bg-foreground-2 shadow-middle relative",
             isFocusedMode ? "rounded-[14px]" : (isRightSidebarVisible ? "rounded-l-[10px] rounded-r-[10px]" : "rounded-l-[10px] rounded-r-[14px]")
           )}>
+            {/* Navigator open button — shown when panel is collapsed */}
+            {!isFocusedMode && !isNavigatorVisible && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.15, duration: 0.15 }}
+                className="absolute left-2 top-2.5 z-10"
+              >
+                <HeaderIconButton
+                  icon={<PanelRightRounded className="h-5 w-6" />}
+                  onClick={() => setIsNavigatorVisible(true)}
+                  tooltip="Open panel"
+                  className="text-foreground"
+                />
+              </motion.div>
+            )}
             <MainContentPanel isFocusedMode={isFocusedMode} />
           </div>
 

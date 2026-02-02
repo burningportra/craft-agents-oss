@@ -12,6 +12,10 @@
  * - source_oauth_trigger: Start OAuth authentication for MCP sources
  * - source_google_oauth_trigger: Start Google OAuth authentication (Gmail, Calendar, Drive)
  * - source_credential_prompt: Prompt user for API credentials
+ * - emit_intent_picker: Display intent selection UI in chat
+ * - emit_phase_indicator: Display phase indicator badge in chat
+ * - emit_extraction_progress: Display extraction progress indicator
+ * - emit_handoff_review: Display extracted planning context for review
  *
  * Source and Skill CRUD is done via standard file editing tools (Read/Write/Edit).
  * See ~/.craft-agent/docs/ for config format documentation.
@@ -180,6 +184,11 @@ export interface SessionScopedToolCallbacks {
    * 5. Agent resumes and processes the result
    */
   onAuthRequest?: (request: AuthRequest) => void;
+  /**
+   * Called when a planning message should be added to the chat.
+   * Used for intent-picker, handoff-review, extraction-progress, and phase-indicator messages.
+   */
+  onPlanningMessage?: (message: any) => Promise<void>;
 }
 
 /**
@@ -2000,6 +2009,270 @@ Returns validation result with specific error messages if invalid.`,
 }
 
 // ============================================================
+// Planning Workflow Tools
+// ============================================================
+
+/**
+ * Tool: emit_intent_picker
+ * Displays an intent selection UI in the chat
+ */
+function createEmitIntentPickerTool(sessionId: string) {
+  return tool(
+    'emit_intent_picker',
+    `Display an intent selection UI in the chat.
+
+Shows interactive buttons for the user to select their task intent:
+- feature: Building a new feature
+- fix: Fixing a bug
+- continue: Continuing previous work
+- explore: Exploring/investigating
+- lost: Need help getting oriented
+
+**When to use:**
+- At the start of a planning conversation
+- When the user's intent is unclear
+- When transitioning to a structured planning workflow
+
+**Returns:** Confirmation that the intent picker was displayed`,
+    {
+      intentOptions: z.array(z.string()).optional().describe('Custom intent options to display. Defaults to [feature, fix, continue, explore, lost]'),
+    },
+    async (args) => {
+      const callbacks = getSessionScopedToolCallbacks(sessionId);
+
+      if (!callbacks?.onPlanningMessage) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: 'Planning message callbacks not available',
+          }],
+          isError: true,
+        };
+      }
+
+      // Create intent-picker message
+      const message = {
+        id: crypto.randomUUID(),
+        role: 'intent-picker' as const,
+        content: 'Select your task intent',
+        timestamp: Date.now(),
+        intentOptions: args.intentOptions || ['feature', 'fix', 'continue', 'explore', 'lost'],
+      };
+
+      // Emit message via callback
+      await callbacks.onPlanningMessage(message);
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: 'Intent picker displayed. Waiting for user selection.',
+        }],
+        isError: false,
+      };
+    }
+  );
+}
+
+/**
+ * Tool: emit_phase_indicator
+ * Displays a phase indicator badge in the chat
+ */
+function createEmitPhaseIndicatorTool(sessionId: string) {
+  return tool(
+    'emit_phase_indicator',
+    `Display a phase indicator badge in the chat showing the current planning phase.
+
+Phases:
+- question: Discovery phase
+- brainstorm: Brainstorming with user
+- extracting: Analyzing conversation
+- handoff: Review phase
+- planning: Creating implementation plan
+
+**When to use:**
+- To show progress through the planning workflow
+- When transitioning between phases
+- To keep the user oriented
+
+**Returns:** Confirmation that the phase indicator was displayed`,
+    {
+      phase: z.enum(['question', 'brainstorm', 'extracting', 'handoff', 'planning']).describe('The current planning phase'),
+    },
+    async (args) => {
+      const callbacks = getSessionScopedToolCallbacks(sessionId);
+
+      if (!callbacks?.onPlanningMessage) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: 'Planning message callbacks not available',
+          }],
+          isError: true,
+        };
+      }
+
+      // Create phase-indicator message
+      const message = {
+        id: crypto.randomUUID(),
+        role: 'phase-indicator' as const,
+        content: `Phase: ${args.phase}`,
+        timestamp: Date.now(),
+        currentPhase: args.phase,
+      };
+
+      // Emit message via callback
+      await callbacks.onPlanningMessage(message);
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Phase indicator displayed: ${args.phase}`,
+        }],
+        isError: false,
+      };
+    }
+  );
+}
+
+/**
+ * Tool: emit_extraction_progress
+ * Shows extraction progress indicator in the chat
+ */
+function createEmitExtractionProgressTool(sessionId: string) {
+  return tool(
+    'emit_extraction_progress',
+    `Display an extraction progress indicator in the chat.
+
+Shows which phase of extraction is currently running:
+- analyzing: Analyzing conversation history
+- extracting: Extracting decisions, files, and risks
+- validating: Validating extracted data
+
+**When to use:**
+- At the start of handoff extraction
+- To show progress during long-running extraction
+- Before displaying handoff review
+
+**Returns:** Confirmation that the progress indicator was displayed`,
+    {
+      phase: z.enum(['analyzing', 'extracting', 'validating']).describe('The current extraction phase'),
+    },
+    async (args) => {
+      const callbacks = getSessionScopedToolCallbacks(sessionId);
+
+      if (!callbacks?.onPlanningMessage) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: 'Planning message callbacks not available',
+          }],
+          isError: true,
+        };
+      }
+
+      // Create extraction-progress message
+      const message = {
+        id: crypto.randomUUID(),
+        role: 'extraction-progress' as const,
+        content: `Extraction: ${args.phase}`,
+        timestamp: Date.now(),
+        extractionPhase: args.phase,
+      };
+
+      // Emit message via callback
+      await callbacks.onPlanningMessage(message);
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Extraction progress displayed: ${args.phase}`,
+        }],
+        isError: false,
+      };
+    }
+  );
+}
+
+/**
+ * Tool: emit_handoff_review
+ * Displays extracted planning context for user review
+ */
+function createEmitHandoffReviewTool(sessionId: string) {
+  return tool(
+    'emit_handoff_review',
+    `Display extracted planning context for user review.
+
+Shows:
+- Decisions made during brainstorming (with confidence levels)
+- Files that need to be modified/created
+- Risks identified and their mitigations
+
+The user can review and edit this context before proceeding to implementation planning.
+
+**When to use:**
+- After extracting context from brainstorm conversation
+- When ready to transition from brainstorming to implementation
+- To get user confirmation before creating a detailed plan
+
+**Returns:** Confirmation that the handoff review was displayed`,
+    {
+      decisions: z.array(z.object({
+        id: z.string(),
+        content: z.string(),
+        confidence: z.enum(['high', 'medium', 'low']),
+      })).describe('Key decisions made during brainstorming'),
+      files: z.array(z.object({
+        path: z.string(),
+        reason: z.string(),
+      })).describe('Files that will be touched'),
+      risks: z.array(z.object({
+        category: z.string(),
+        description: z.string(),
+        mitigation: z.string(),
+      })).describe('Identified risks and mitigations'),
+    },
+    async (args) => {
+      const callbacks = getSessionScopedToolCallbacks(sessionId);
+
+      if (!callbacks?.onPlanningMessage) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: 'Planning message callbacks not available',
+          }],
+          isError: true,
+        };
+      }
+
+      // Create handoff-review message
+      const message = {
+        id: crypto.randomUUID(),
+        role: 'handoff-review' as const,
+        content: 'Review planning context',
+        timestamp: Date.now(),
+        handoffPayload: {
+          decisions: args.decisions,
+          files: args.files,
+          risks: args.risks,
+        },
+        handoffEditable: true,
+      };
+
+      // Emit message via callback
+      await callbacks.onPlanningMessage(message);
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Handoff review displayed with ${args.decisions.length} decisions, ${args.files.length} files, and ${args.risks.length} risks.`,
+        }],
+        isError: false,
+      };
+    }
+  );
+}
+
+// ============================================================
 // Session-Scoped Tools Provider
 // ============================================================
 
@@ -2040,6 +2313,11 @@ export function getSessionScopedTools(sessionId: string, workspaceRootPath: stri
         createSlackOAuthTriggerTool(sessionId, workspaceRootPath),
         createMicrosoftOAuthTriggerTool(sessionId, workspaceRootPath),
         createCredentialPromptTool(sessionId, workspaceRootPath),
+        // Planning workflow tools
+        createEmitIntentPickerTool(sessionId),
+        createEmitPhaseIndicatorTool(sessionId),
+        createEmitExtractionProgressTool(sessionId),
+        createEmitHandoffReviewTool(sessionId),
       ],
     });
     sessionScopedToolsCache.set(cacheKey, cached);

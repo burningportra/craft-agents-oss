@@ -365,6 +365,16 @@ export interface AuthCompletedEvent {
 }
 
 /**
+ * Planning message event - adds a planning workflow message to the session
+ * Used for intent-picker, handoff-review, extraction-progress, phase-indicator
+ */
+export interface PlanningMessageEvent {
+  type: 'planning_message'
+  sessionId: string
+  message: Message
+}
+
+/**
  * Source activated event - a source was auto-activated mid-turn
  * Caller should re-send the original message to retry with the now-active source
  */
@@ -425,6 +435,7 @@ export type AgentEvent =
   | SessionUnsharedEvent
   | AuthRequestEvent
   | AuthCompletedEvent
+  | PlanningMessageEvent
   | SourceActivatedEvent
   | UsageUpdateEvent
 

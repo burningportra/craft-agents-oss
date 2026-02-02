@@ -42,8 +42,13 @@ import { useTheme } from "@/hooks/useTheme"
 import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
 import type { PermissionMode } from "@craft-agent/shared/agent/modes"
 import type { ThinkingLevel } from "@craft-agent/shared/agent/thinking-levels"
-import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type AuthRequestTurn } from "@craft-agent/ui"
+import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type AuthRequestTurn, type IntentPickerTurn, type HandoffReviewTurn, type ExtractionProgressTurn, type PhaseIndicatorTurn } from "@craft-agent/ui"
 import { MemoizedAuthRequestCard } from "@/components/chat/AuthRequestCard"
+import { MemoizedIntentPickerCard } from "@/components/chat/IntentPickerCard"
+import { WelcomeIntentPicker } from "@/components/chat/WelcomeIntentPicker"
+import { MemoizedHandoffReviewCard } from "@/components/chat/HandoffReviewCard"
+import { MemoizedExtractionCard } from "@/components/chat/ExtractionCard"
+import { MemoizedPhaseIndicator } from "@/components/chat/PhaseIndicator"
 import { ActiveOptionBadges } from "./ActiveOptionBadges"
 import { InputContainer, type StructuredInputState, type StructuredResponse, type PermissionResponse } from "./input"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
@@ -1269,6 +1274,10 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                       <span className="text-xs text-muted-foreground/50">Just describe it — I'll handle the rest</span>
                     </div>
                   )}
+                  {/* Welcome intent picker for normal mode empty sessions */}
+                  {!compactMode && turns.length === 0 && (
+                    <WelcomeIntentPicker onSelectIntent={(message) => onSendMessage(message)} />
+                  )}
                   {/* Load more indicator - shown when there are older messages */}
                   {hasMoreAbove && (
                     <div className="text-center text-muted-foreground/60 text-xs py-3 select-none">
@@ -1281,6 +1290,10 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                       if (turn.type === 'user') return `user-${turn.message.id}`
                       if (turn.type === 'system') return `system-${turn.message.id}`
                       if (turn.type === 'auth-request') return `auth-${turn.message.id}`
+                      if (turn.type === 'intent-picker') return `intent-${turn.message.id}`
+                      if (turn.type === 'handoff-review') return `handoff-${turn.message.id}`
+                      if (turn.type === 'extraction-progress') return `extraction-${turn.message.id}`
+                      if (turn.type === 'phase-indicator') return `phase-${turn.message.id}`
                       return `turn-${turn.turnId}`
                     }
                     const turnKey = getTurnKey()
@@ -1353,6 +1366,82 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                             onRespondToCredential={onRespondToCredential}
                             isInteractive={isAuthInteractive}
                           />
+                        </div>
+                      )
+                    }
+
+                    // Intent-picker turns - render inline intent selection UI
+                    if (turn.type === 'intent-picker') {
+                      const isInteractive = !turns.slice(index + 1).some(t => t.type === 'user')
+                      return (
+                        <div
+                          key={turnKey}
+                          ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
+                          className={cn(
+                            "mt-2 rounded-lg transition-all duration-200",
+                            isCurrentMatch && "ring-2 ring-info ring-offset-2 ring-offset-background",
+                            isAnyMatch && !isCurrentMatch && "ring-1 ring-info/30"
+                          )}
+                        >
+                          <MemoizedIntentPickerCard
+                            message={turn.message}
+                            sessionId={session.id}
+                            isInteractive={isInteractive}
+                            onSelectIntent={(intent) => {
+                              // Send message with selected intent
+                              onSendMessage(`I want to work on a ${intent}`)
+                            }}
+                          />
+                        </div>
+                      )
+                    }
+
+                    // Handoff-review turns - render inline review UI
+                    if (turn.type === 'handoff-review') {
+                      const isInteractive = !turns.slice(index + 1).some(t => t.type === 'user')
+                      return (
+                        <div
+                          key={turnKey}
+                          ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
+                          className={cn(
+                            "mt-2 rounded-lg transition-all duration-200",
+                            isCurrentMatch && "ring-2 ring-info ring-offset-2 ring-offset-background",
+                            isAnyMatch && !isCurrentMatch && "ring-1 ring-info/30"
+                          )}
+                        >
+                          <MemoizedHandoffReviewCard
+                            message={turn.message}
+                            sessionId={session.id}
+                            isInteractive={isInteractive}
+                            onReadyToPlan={() => {
+                              // Send message to proceed to planning
+                              onSendMessage('Ready to plan. Please create a detailed implementation plan.')
+                            }}
+                          />
+                        </div>
+                      )
+                    }
+
+                    // Extraction-progress turns - render spinner
+                    if (turn.type === 'extraction-progress') {
+                      return (
+                        <div
+                          key={turnKey}
+                          ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
+                        >
+                          <MemoizedExtractionCard message={turn.message} />
+                        </div>
+                      )
+                    }
+
+                    // Phase-indicator turns - render phase badge
+                    if (turn.type === 'phase-indicator') {
+                      return (
+                        <div
+                          key={turnKey}
+                          ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
+                        >
+                          <MemoizedPhaseIndicator message={turn.message} />
                         </div>
                       )
                     }

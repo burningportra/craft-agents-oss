@@ -442,6 +442,10 @@ export class CraftAgent {
   // 5. Agent resumes and processes the result
   public onAuthRequest: ((request: AuthRequest) => void) | null = null;
 
+  // Callback when a planning message should be added to the chat
+  // Used for intent-picker, handoff-review, extraction-progress, and phase-indicator messages
+  public onPlanningMessage: ((message: any) => void) | null = null;
+
   // Callback when a source config changes (hot-reload from file watcher)
   public onSourceChange: ((slug: string, source: LoadedSource | null) => void) | null = null;
 
@@ -499,6 +503,10 @@ export class CraftAgent {
       onAuthRequest: (request) => {
         this.onDebug?.(`[CraftAgent] onAuthRequest received: ${request.sourceSlug} (type: ${request.type})`);
         this.onAuthRequest?.(request);
+      },
+      onPlanningMessage: async (message) => {
+        this.onDebug?.(`[CraftAgent] onPlanningMessage received: ${message.role}`);
+        this.onPlanningMessage?.(message);
       },
     });
 

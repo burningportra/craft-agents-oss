@@ -42,6 +42,7 @@ import {
   handleSessionUnshared,
   handleAuthRequest,
   handleAuthCompleted,
+  handlePlanningMessage,
   handleUsageUpdate,
 } from './handlers/session'
 
@@ -172,6 +173,9 @@ export function processEvent(
 
     case 'auth_completed':
       return handleAuthCompleted(state, event)
+
+    case 'planning_message':
+      return handlePlanningMessage(state, event)
 
     case 'source_activated':
       // Source was auto-activated mid-turn, emit effect to auto-retry

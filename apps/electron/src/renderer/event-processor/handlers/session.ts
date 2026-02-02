@@ -751,6 +751,28 @@ export function handleAuthCompleted(
 }
 
 /**
+ * Handle planning_message - add planning message to session
+ * Used for intent-picker, handoff-review, extraction-progress, phase-indicator
+ */
+export function handlePlanningMessage(
+  state: SessionState,
+  event: PlanningMessageEvent
+): ProcessResult {
+  const { session, streaming } = state
+
+  // Add planning message to session
+  return {
+    state: {
+      session: {
+        ...appendMessage(session, event.message),
+      },
+      streaming,
+    },
+    effects: [],
+  }
+}
+
+/**
  * Handle usage_update - real-time context usage during processing
  * Merges usage update into existing tokenUsage (preserves outputTokens, costUsd, etc.)
  */

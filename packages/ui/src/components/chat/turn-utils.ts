@@ -60,6 +60,16 @@ export function storedToMessage(stored: StoredMessage): Message {
     errorCanRetry: stored.errorCanRetry,
     ultrathink: stored.ultrathink,
     planPath: stored.planPath,
+    // Intent-picker fields
+    intentOptions: stored.intentOptions,
+    intentSelected: stored.intentSelected,
+    // Handoff-review fields
+    handoffPayload: stored.handoffPayload,
+    handoffEditable: stored.handoffEditable,
+    // Extraction-progress fields
+    extractionPhase: stored.extractionPhase,
+    // Phase-indicator fields
+    currentPhase: stored.currentPhase,
     // Auth-request fields
     authRequestId: stored.authRequestId,
     authRequestType: stored.authRequestType,
@@ -116,7 +126,35 @@ export interface AuthRequestTurn {
   timestamp: number
 }
 
-export type Turn = AssistantTurn | UserTurn | SystemTurn | AuthRequestTurn
+/** Represents an intent picker (feature/fix/continue/explore/lost) */
+export interface IntentPickerTurn {
+  type: 'intent-picker'
+  message: Message
+  timestamp: number
+}
+
+/** Represents a handoff review card */
+export interface HandoffReviewTurn {
+  type: 'handoff-review'
+  message: Message
+  timestamp: number
+}
+
+/** Represents extraction progress indicator */
+export interface ExtractionProgressTurn {
+  type: 'extraction-progress'
+  message: Message
+  timestamp: number
+}
+
+/** Represents a phase indicator badge */
+export interface PhaseIndicatorTurn {
+  type: 'phase-indicator'
+  message: Message
+  timestamp: number
+}
+
+export type Turn = AssistantTurn | UserTurn | SystemTurn | AuthRequestTurn | IntentPickerTurn | HandoffReviewTurn | ExtractionProgressTurn | PhaseIndicatorTurn
 
 // ============================================================================
 // Turn Lifecycle Phase
@@ -429,6 +467,54 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
       flushCurrentTurn()
       turns.push({
         type: 'auth-request',
+        message,
+        timestamp: message.timestamp,
+      })
+      continue
+    }
+
+    // Intent-picker messages are standalone turns
+    if (message.role === 'intent-picker') {
+      if (currentTurn) currentTurn.isComplete = true
+      flushCurrentTurn()
+      turns.push({
+        type: 'intent-picker',
+        message,
+        timestamp: message.timestamp,
+      })
+      continue
+    }
+
+    // Handoff-review messages are standalone turns
+    if (message.role === 'handoff-review') {
+      if (currentTurn) currentTurn.isComplete = true
+      flushCurrentTurn()
+      turns.push({
+        type: 'handoff-review',
+        message,
+        timestamp: message.timestamp,
+      })
+      continue
+    }
+
+    // Extraction-progress messages are standalone turns
+    if (message.role === 'extraction-progress') {
+      if (currentTurn) currentTurn.isComplete = true
+      flushCurrentTurn()
+      turns.push({
+        type: 'extraction-progress',
+        message,
+        timestamp: message.timestamp,
+      })
+      continue
+    }
+
+    // Phase-indicator messages are standalone turns
+    if (message.role === 'phase-indicator') {
+      if (currentTurn) currentTurn.isComplete = true
+      flushCurrentTurn()
+      turns.push({
+        type: 'phase-indicator',
         message,
         timestamp: message.timestamp,
       })

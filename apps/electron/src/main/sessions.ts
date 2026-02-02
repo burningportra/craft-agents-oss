@@ -1661,6 +1661,24 @@ export class SessionManager {
         // The UI will call sessionCommand({ type: 'startOAuth' }) when user clicks "Sign in"
       }
 
+      // Wire up onPlanningMessage to add planning messages to conversation
+      managed.agent.onPlanningMessage = async (message) => {
+        sessionLog.info(`Planning message for session ${managed.id}:`, message.role)
+
+        // Add to session messages
+        managed.messages.push(message)
+
+        // Emit planning_message event to renderer
+        this.sendEvent({
+          type: 'planning_message',
+          sessionId: managed.id,
+          message: message,
+        }, managed.workspace.id)
+
+        // Persist session state
+        this.persistSession(managed)
+      }
+
       // Wire up onSourceActivationRequest to auto-enable sources when agent tries to use them
       managed.agent.onSourceActivationRequest = async (sourceSlug: string): Promise<boolean> => {
         sessionLog.info(`Source activation request for session ${managed.id}:`, sourceSlug)
