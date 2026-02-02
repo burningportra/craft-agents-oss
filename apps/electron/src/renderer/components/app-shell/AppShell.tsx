@@ -2208,13 +2208,25 @@ function AppShellContent({
           {!isFocusedMode && (
           <motion.div
             initial={false}
-            animate={{ width: isNavigatorVisible ? sessionListWidth : 0 }}
+            animate={{ width: isNavigatorVisible ? sessionListWidth : 36 }}
             transition={isResizing ? { duration: 0 } : springTransition}
-            className="h-full shrink-0 overflow-hidden"
+            className="h-full shrink-0 relative"
+            style={{ overflow: isNavigatorVisible ? 'hidden' : 'visible', zIndex: isNavigatorVisible ? undefined : 'var(--z-panel)' }}
           >
+          {/* Expand button shown when navigator is collapsed */}
+          {!isNavigatorVisible && (
+            <div className="titlebar-no-drag absolute inset-0 flex items-start justify-center pt-2" style={{ zIndex: 'var(--z-panel)' }}>
+              <HeaderIconButton
+                icon={<PanelRightRounded className="h-5 w-6" />}
+                onClick={() => setIsNavigatorVisible(true)}
+                tooltip="Open panel"
+                className="text-foreground titlebar-no-drag"
+              />
+            </div>
+          )}
           <div
             className="h-full flex flex-col min-w-0 bg-background shrink-0 shadow-middle overflow-hidden rounded-l-[14px] rounded-r-[10px]"
-            style={{ width: sessionListWidth }}
+            style={{ width: sessionListWidth, opacity: isNavigatorVisible ? 1 : 0 }}
           >
             <PanelHeader
               title={isSidebarVisible ? listTitle : undefined}
@@ -2907,25 +2919,9 @@ function AppShellContent({
 
           {/* === MAIN CONTENT PANEL === */}
           <div className={cn(
-            "flex-1 overflow-hidden min-w-0 bg-foreground-2 shadow-middle relative",
+            "flex-1 overflow-hidden min-w-0 bg-foreground-2 shadow-middle",
             isFocusedMode ? "rounded-[14px]" : (isRightSidebarVisible ? "rounded-l-[10px] rounded-r-[10px]" : "rounded-l-[10px] rounded-r-[14px]")
           )}>
-            {/* Navigator open button — shown when panel is collapsed */}
-            {!isFocusedMode && !isNavigatorVisible && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.15, duration: 0.15 }}
-                className="absolute left-2 top-2.5 z-10"
-              >
-                <HeaderIconButton
-                  icon={<PanelRightRounded className="h-5 w-6" />}
-                  onClick={() => setIsNavigatorVisible(true)}
-                  tooltip="Open panel"
-                  className="text-foreground"
-                />
-              </motion.div>
-            )}
             <MainContentPanel isFocusedMode={isFocusedMode} />
           </div>
 
@@ -3021,6 +3017,7 @@ function AppShellContent({
             </AnimatePresence>
           )}
         </div>
+
       </div>
 
       {/* ============================================================================
