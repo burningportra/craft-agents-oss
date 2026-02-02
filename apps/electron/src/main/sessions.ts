@@ -4,6 +4,7 @@ import { join } from 'path'
 import { existsSync } from 'fs'
 import { rm, readFile } from 'fs/promises'
 import { CraftAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@craft-agent/shared/agent'
+import { extractLearningsFromMessages, appendLearnings } from '@craft-agent/shared/agent/learnings'
 import { sessionLog, isDebugMode, getLogFilePath } from './logger'
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import type { WindowManager } from './window-manager'
@@ -1476,6 +1477,8 @@ export class SessionManager {
         isHeadless: !AGENT_FLAGS.defaultModesEnabled,
         // System prompt preset for mini agents (focused prompts for quick edits)
         systemPromptPreset: managed.systemPromptPreset,
+        // Enable swarm mode for multi-agent coordination
+        swarmMode: true,
         // Always pass session object - id is required for plan mode callbacks
         // sdkSessionId is optional and used for conversation resumption
         session: {
@@ -1677,6 +1680,15 @@ export class SessionManager {
 
         // Persist session state
         this.persistSession(managed)
+      }
+
+      // Wire up onTurnComplete for post-turn learnings extraction
+      managed.agent.onTurnComplete = async (messages) => {
+        const learnings = extractLearningsFromMessages(messages)
+        if (learnings.length > 0) {
+          appendLearnings(managed.workspace.rootPath, learnings)
+          sessionLog.info(`Extracted ${learnings.length} learnings for session ${managed.id}`)
+        }
       }
 
       // Wire up onSourceActivationRequest to auto-enable sources when agent tries to use them
@@ -2843,7 +2855,16 @@ export class SessionManager {
       }, managed.workspace.id)
     }
 
-    // 5. Always persist
+    // 5. Fire onTurnComplete for post-turn processing (learnings extraction)
+    if (reason === 'complete' && managed.agent?.onTurnComplete) {
+      try {
+        await managed.agent.onTurnComplete(managed.messages)
+      } catch (error) {
+        sessionLog.warn(`onTurnComplete error for session ${sessionId}:`, error)
+      }
+    }
+
+    // 6. Always persist
     this.persistSession(managed)
   }
 

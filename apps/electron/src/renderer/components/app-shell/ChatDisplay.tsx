@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Info,
   PenLine,
+  RefreshCw,
   X,
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
@@ -1572,6 +1573,22 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                       startTime={lastUserMsg?.timestamp}
                       statusMessage={session.currentStatus?.message}
                     />
+                  )
+                })()}
+                {/* Regenerate button - shown after turn completes */}
+                {!session.isProcessing && turns.length > 0 && (() => {
+                  const lastUserMsg = [...session.messages].reverse().find(m => m.role === 'user')
+                  if (!lastUserMsg) return null
+                  return (
+                    <div className="flex justify-center py-1">
+                      <button
+                        onClick={() => onSendMessage(lastUserMsg.content)}
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2.5 py-1 rounded-md hover:bg-muted"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        Regenerate
+                      </button>
+                    </div>
                   )
                 })()}
                 {/* Scroll Anchor: For auto-scroll to bottom */}

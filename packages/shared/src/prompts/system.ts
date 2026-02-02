@@ -7,6 +7,7 @@ import { PERMISSION_MODE_CONFIG } from '../agent/mode-types.ts';
 import { APP_VERSION } from '../version/index.ts';
 import { globSync } from 'glob';
 import os from 'os';
+import { readLearnings, distillLearnings } from '../agent/learnings.ts';
 
 /** Maximum size of CLAUDE.md file to include (10KB) */
 const MAX_CONTEXT_FILE_SIZE = 10 * 1024;
@@ -323,11 +324,17 @@ export function getSystemPrompt(
   // Get project context files for monorepo support (lives in system prompt for persistence across compaction)
   const projectContextFiles = getProjectContextFilesPrompt(workingDirectory);
 
+  // Get workspace learnings — distilled into structured sections for the agent
+  const distilled = workspaceRootPath ? distillLearnings(workspaceRootPath) : '';
+  const learningsContext = distilled
+    ? `\n\n## Workspace Learnings\n\nPatterns observed from previous sessions in this workspace:\n\n${distilled}\n`
+    : '';
+
   // Note: Date/time context is now added to user messages instead of system prompt
   // to enable prompt caching. The system prompt stays static and cacheable.
   // Safe Mode context is also in user messages for the same reason.
   const basePrompt = getCraftAssistantPrompt(workspaceRootPath);
-  const fullPrompt = `${basePrompt}${preferences}${debugContext}${projectContextFiles}`;
+  const fullPrompt = `${basePrompt}${preferences}${debugContext}${projectContextFiles}${learningsContext}`;
 
   debug('[getSystemPrompt] full prompt length:', fullPrompt.length);
 
@@ -579,5 +586,30 @@ All MCP tools require two metadata fields (schema-enforced):
 - **\`_displayName\`** (required): Short name for the action (2-4 words), e.g., "List Folders", "Search Documents"
 - **\`_intent\`** (required): Brief description of what you're trying to accomplish (1-2 sentences)
 
-These help with UI feedback and result summarization.`;
+These help with UI feedback and result summarization.
+
+## Intent Layer: Self-Updating AGENTS.md
+
+AGENTS.md files are **Intent Nodes** — compressed context that helps future sessions work more effectively.
+
+**After significant work** (fixing bugs, building features, making architecture decisions), update the project's AGENTS.md to capture:
+- **Decisions** — "We chose X over Y because..."
+- **Patterns** — "To add a new X, follow this pattern..."
+- **Anti-patterns** — "Never do X because..."
+- **Gotchas** — Sharp edges and non-obvious behaviors
+
+**Rules for updating AGENTS.md:**
+1. **Compress, don't bloat** — Intent Nodes should be smaller than the code they describe. Target 1-2k tokens per file.
+2. **Only add genuinely useful context** — If it's obvious from reading the code, don't add it.
+3. **Update, don't just append** — Revise existing sections when new information supersedes old.
+4. **Ask before creating** — If no AGENTS.md exists, ask the user before creating one.
+5. **Keep hierarchy** — Root AGENTS.md for project-wide context, subdirectory AGENTS.md for subsystem specifics.
+
+**When to update:**
+- After fixing a bug that had a non-obvious cause
+- After making an architecture or dependency decision
+- After discovering a gotcha or sharp edge
+- When the user says "remember this" or "don't make that mistake again"
+- NOT after trivial changes (typos, formatting, simple additions)`;
+
 }

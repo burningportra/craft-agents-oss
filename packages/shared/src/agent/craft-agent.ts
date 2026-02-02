@@ -14,6 +14,7 @@ import { getCredentialManager } from '../credentials/index.ts';
 import { updatePreferences, loadPreferences, formatPreferencesForPrompt, type UserPreferences } from '../config/preferences.ts';
 import type { FileAttachment } from '../utils/files.ts';
 import { debug } from '../utils/debug.ts';
+import { getSwarmTaskStore, cleanupSwarmTaskStore } from '../mcp/swarm-task-store.ts';
 import {
   getSessionPlansDir,
   getLastPlanFilePath,
@@ -123,6 +124,8 @@ export interface CraftAgentConfig {
   };
   /** System prompt preset for mini agents ('default' | 'mini' or custom string) */
   systemPromptPreset?: 'default' | 'mini' | string;
+  /** Enable swarm mode for multi-agent coordination via shared task store */
+  swarmMode?: boolean;
 }
 
 // Permission request tracking
@@ -445,6 +448,10 @@ export class CraftAgent {
   // Callback when a planning message should be added to the chat
   // Used for intent-picker, handoff-review, extraction-progress, and phase-indicator messages
   public onPlanningMessage: ((message: any) => void) | null = null;
+
+  // Callback when a turn completes successfully — used for post-turn processing
+  // (e.g., extracting learnings, updating project context)
+  public onTurnComplete: ((messages: any[]) => Promise<void>) | null = null;
 
   // Callback when a source config changes (hot-reload from file watcher)
   public onSourceChange: ((slug: string, source: LoadedSource | null) => void) | null = null;
@@ -855,6 +862,10 @@ export class CraftAgent {
             // Note: Craft MCP server is now added via sources system
             ...sourceMcpResult.servers,
             ...this.sourceApiServers,
+            // Swarm mode: shared task store for multi-agent coordination
+            ...(this.config.swarmMode && {
+              'swarm-tasks': getSwarmTaskStore(sessionId),
+            }),
           };
       
       // Configure SDK options
@@ -3225,6 +3236,7 @@ Please continue the conversation naturally from where we left off.
     this.onSourcesListChange = null;
     this.onConfigValidationError = null;
     this.onSourceActivationRequest = null;
+    this.onTurnComplete = null;
 
     // Stop config watcher
     this.stopConfigWatcher();
@@ -3234,6 +3246,7 @@ Please continue the conversation naturally from where we left off.
     if (configSessionId) {
       cleanupModeState(configSessionId);
       cleanupSessionScopedTools(configSessionId);
+      cleanupSwarmTaskStore(configSessionId);
     }
 
     // Clear session

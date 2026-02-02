@@ -196,6 +196,7 @@ ${this.config.prompt}
       workspace: this.config.workspace,
       model: this.config.model,
       isHeadless: true,
+      swarmMode: true,
       // Create a minimal session config with the permission mode
       session: {
         id: `headless-${Date.now()}`,
