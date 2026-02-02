@@ -1609,6 +1609,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             <ActiveOptionBadges
               ultrathinkEnabled={ultrathinkEnabled}
               onUltrathinkChange={onUltrathinkChange}
+              swarmMode={true}
               permissionMode={permissionMode}
               onPermissionModeChange={onPermissionModeChange}
               tasks={backgroundTasks}

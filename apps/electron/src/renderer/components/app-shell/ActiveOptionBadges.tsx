@@ -42,6 +42,8 @@ export interface ActiveOptionBadgesProps {
   ultrathinkEnabled?: boolean
   /** Callback when ultrathink is toggled off */
   onUltrathinkChange?: (enabled: boolean) => void
+  /** Show swarm mode badge */
+  swarmMode?: boolean
   /** Current permission mode */
   permissionMode?: PermissionMode
   /** Callback when permission mode changes */
@@ -87,6 +89,7 @@ interface ResolvedLabelEntry {
 export function ActiveOptionBadges({
   ultrathinkEnabled = false,
   onUltrathinkChange,
+  swarmMode = false,
   permissionMode = 'ask',
   onPermissionModeChange,
   tasks = [],
@@ -141,7 +144,7 @@ export function ActiveOptionBadges({
   const stackRef = useDynamicStack({ gap: 8, minVisible: 20, reservedStart: 24 })
 
   // Only render if badges or tasks are active
-  if (!ultrathinkEnabled && !permissionMode && tasks.length === 0 && !hasStackContent) {
+  if (!ultrathinkEnabled && !swarmMode && !permissionMode && tasks.length === 0 && !hasStackContent) {
     return null
   }
 
@@ -172,6 +175,18 @@ export function ActiveOptionBadges({
           </span>
           <X className="h-3 w-3 text-purple-500 opacity-60 hover:opacity-100 translate-y-px" />
         </button>
+      )}
+
+      {/* Swarm Mode Badge */}
+      {swarmMode && (
+        <div
+          className="h-[30px] px-2.5 text-xs font-medium rounded-[8px] flex items-center gap-1.5 shrink-0 bg-gradient-to-r from-emerald-600/10 via-teal-600/10 to-cyan-600/10 shadow-tinted select-none"
+          style={{ '--shadow-color': '20, 184, 166' } as React.CSSProperties}
+        >
+          <span className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 bg-clip-text text-transparent">
+            Swarm Mode
+          </span>
+        </div>
       )}
 
       {/* Stacking container for state badge + label badges.

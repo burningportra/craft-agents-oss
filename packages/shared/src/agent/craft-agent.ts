@@ -838,6 +838,7 @@ export class CraftAgent {
 
       debug('[chat] sourceMcpServers:', sourceMcpResult.servers);
       debug('[chat] sourceApiServers:', this.sourceApiServers);
+      debug('[chat] swarmMode:', this.config.swarmMode);
 
       const mcpServers: Options['mcpServers'] = isMiniAgent
         ? {
@@ -867,7 +868,9 @@ export class CraftAgent {
               'swarm-tasks': getSwarmTaskStore(sessionId),
             }),
           };
-      
+
+      debug('[chat] mcpServers keys:', Object.keys(mcpServers));
+
       // Configure SDK options
       // Resolve model: use tier name when using custom API (OpenRouter), else specific version
       const modelConfig = this.config.model || DEFAULT_MODEL;
@@ -1064,7 +1067,8 @@ export class CraftAgent {
                   // - preferences: user preferences storage
                   // - session: session-scoped tools (SubmitPlan, source_test, etc.)
                   // - craft-agents-docs: always-available documentation search
-                  const builtInMcpServers = new Set(['preferences', 'session', 'craft-agents-docs']);
+                  // - swarm-tasks: shared task store for multi-agent coordination
+                  const builtInMcpServers = new Set(['preferences', 'session', 'craft-agents-docs', 'swarm-tasks']);
 
                   // Check if this is a source server (not built-in)
                   if (!builtInMcpServers.has(serverName)) {
