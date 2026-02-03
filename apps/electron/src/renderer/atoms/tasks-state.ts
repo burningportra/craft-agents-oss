@@ -10,6 +10,14 @@ import { atomWithStorage } from 'jotai/utils'
 import { atomFamily } from 'jotai-family'
 import type { EpicSummary, TaskSummary, TaskStatus, FlowBridgeResult, EpicListResponse, TaskListResponse, CommandSuccess } from '../../shared/flow-schemas'
 
+// ─── View Mode Types ──────────────────────────────────────────────────────────
+
+/** Available view modes for epic content */
+export type ViewMode = 'list' | 'kanban' | 'graph'
+
+/** Default view mode when no override is set */
+export const DEFAULT_VIEW_MODE: ViewMode = 'list'
+
 // ─── Utils ───────────────────────────────────────────────────────────────────
 
 /**
@@ -230,6 +238,149 @@ export const resetTasksStateAtom = atom(
     set(selectedEpicIdAtom, null)
   }
 )
+
+// ─── Tab Navigation Atoms ─────────────────────────────────────────────────────
+
+/**
+ * Open tabs: ordered array of epic IDs
+ * Persisted via atomWithStorage - restores on reload
+ */
+export const openTabsAtom = atomWithStorage<string[]>(
+  'tasks-open-tabs',
+  []
+)
+
+/**
+ * Active (currently visible) tab: epic ID
+ * Persisted via atomWithStorage - restores on reload
+ */
+export const activeTabAtom = atomWithStorage<string | null>(
+  'tasks-active-tab',
+  null
+)
+
+/**
+ * View mode override per epic
+ * Uses atomFamily for per-epic storage with atomWithStorage for persistence
+ */
+export const viewModePerEpicAtomFamily = atomFamily(
+  (epicId: string) => atomWithStorage<ViewMode | null>(
+    `tasks-view-mode-${epicId}`,
+    null
+  ),
+  (a, b) => a === b
+)
+
+// ─── Tab Action Atoms ─────────────────────────────────────────────────────────
+
+/**
+ * Action atom: Open an epic tab (or activate if already open)
+ * Adds to openTabs if not present, sets as activeTab
+ */
+export const openEpicTabAtom = atom(
+  null,
+  (get, set, epicId: string) => {
+    const openTabs = get(openTabsAtom)
+
+    if (!openTabs.includes(epicId)) {
+      // Add new tab at end
+      set(openTabsAtom, [...openTabs, epicId])
+    }
+
+    // Activate the tab
+    set(activeTabAtom, epicId)
+    // Also sync with selectedEpicIdAtom for backward compatibility
+    set(selectedEpicIdAtom, epicId)
+  }
+)
+
+/**
+ * Action atom: Close an epic tab
+ * Removes from openTabs, selects adjacent tab if closing active tab
+ */
+export const closeEpicTabAtom = atom(
+  null,
+  (get, set, epicId: string) => {
+    const openTabs = get(openTabsAtom)
+    const activeTab = get(activeTabAtom)
+
+    const tabIndex = openTabs.indexOf(epicId)
+    if (tabIndex === -1) return
+
+    // Remove the tab
+    const newTabs = openTabs.filter(id => id !== epicId)
+    set(openTabsAtom, newTabs)
+
+    // If closing active tab, select adjacent (prefer next, then previous)
+    if (activeTab === epicId) {
+      if (newTabs.length === 0) {
+        set(activeTabAtom, null)
+        set(selectedEpicIdAtom, null)
+      } else {
+        // Prefer the tab at same index, or the last tab if at end
+        const newIndex = Math.min(tabIndex, newTabs.length - 1)
+        const newActive = newTabs[newIndex]
+        set(activeTabAtom, newActive)
+        set(selectedEpicIdAtom, newActive)
+      }
+    }
+  }
+)
+
+/**
+ * Action atom: Set active tab (switch between open tabs)
+ */
+export const setActiveTabAtom = atom(
+  null,
+  (get, set, epicId: string) => {
+    const openTabs = get(openTabsAtom)
+    if (openTabs.includes(epicId)) {
+      set(activeTabAtom, epicId)
+      set(selectedEpicIdAtom, epicId)
+    }
+  }
+)
+
+/**
+ * Action atom: Set view mode for an epic
+ */
+export const setViewModeAtom = atom(
+  null,
+  (_get, set, epicId: string, mode: ViewMode) => {
+    set(viewModePerEpicAtomFamily(epicId), mode)
+  }
+)
+
+// ─── View Mode Selectors ──────────────────────────────────────────────────────
+
+/**
+ * Determine the best view mode for an epic based on task count and dependencies
+ * - <5 tasks: list view
+ * - >=5 tasks: kanban view
+ * - Any dependencies: graph available (but not auto-selected)
+ */
+export function suggestViewMode(tasks: TaskSummary[]): ViewMode {
+  if (tasks.length < 5) return 'list'
+  return 'kanban'
+}
+
+/**
+ * Check if graph view should be available (any task has dependencies)
+ */
+export function isGraphViewAvailable(tasks: TaskSummary[]): boolean {
+  return tasks.some(task => task.depends_on && task.depends_on.length > 0)
+}
+
+/**
+ * Get effective view mode for an epic (user override or auto-suggested)
+ */
+export function getEffectiveViewMode(
+  userOverride: ViewMode | null,
+  tasks: TaskSummary[]
+): ViewMode {
+  if (userOverride !== null) return userOverride
+  return suggestViewMode(tasks)
+}
 
 /**
  * Action atom: Update task status via drag-drop

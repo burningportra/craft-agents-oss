@@ -1,0 +1,259 @@
+/**
+ * EpicTabBar
+ *
+ * Tab bar for multi-epic navigation with closeable tabs.
+ * Features:
+ * - One tab per open epic
+ * - Close button on each tab (X + middle-click)
+ * - Horizontal scroll with arrow buttons when >8 tabs
+ * - Spring animations using collapsible springTransition
+ */
+
+import * as React from 'react'
+import { motion, AnimatePresence } from 'motion/react'
+import { X, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import { useAtomValue, useSetAtom } from 'jotai'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
+import {
+  openTabsAtom,
+  activeTabAtom,
+  epicsAtom,
+  closeEpicTabAtom,
+  setActiveTabAtom,
+} from '@/atoms/tasks-state'
+
+// Spring transition config - snappy, no bounce (matches collapsible)
+const springTransition = {
+  type: 'spring' as const,
+  stiffness: 600,
+  damping: 49,
+}
+
+export interface EpicTabBarProps {
+  /** Optional callback when "add" button is clicked */
+  onAddTab?: () => void
+  /** Optional className */
+  className?: string
+}
+
+export function EpicTabBar({ onAddTab, className }: EpicTabBarProps) {
+  const openTabs = useAtomValue(openTabsAtom)
+  const activeTab = useAtomValue(activeTabAtom)
+  const epics = useAtomValue(epicsAtom)
+  const closeTab = useSetAtom(closeEpicTabAtom)
+  const setActiveTab = useSetAtom(setActiveTabAtom)
+
+  const scrollRef = React.useRef<HTMLDivElement>(null)
+  const [showLeftArrow, setShowLeftArrow] = React.useState(false)
+  const [showRightArrow, setShowRightArrow] = React.useState(false)
+
+  // Check scroll state to show/hide arrows
+  const updateArrows = React.useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    setShowLeftArrow(el.scrollLeft > 0)
+    setShowRightArrow(el.scrollLeft < el.scrollWidth - el.clientWidth - 1)
+  }, [])
+
+  // Update arrows on scroll and resize
+  React.useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+
+    updateArrows()
+    el.addEventListener('scroll', updateArrows)
+    const resizeObserver = new ResizeObserver(updateArrows)
+    resizeObserver.observe(el)
+
+    return () => {
+      el.removeEventListener('scroll', updateArrows)
+      resizeObserver.disconnect()
+    }
+  }, [updateArrows, openTabs.length])
+
+  // Scroll handlers
+  const scrollLeft = React.useCallback(() => {
+    const el = scrollRef.current
+    if (el) {
+      el.scrollBy({ left: -200, behavior: 'smooth' })
+    }
+  }, [])
+
+  const scrollRight = React.useCallback(() => {
+    const el = scrollRef.current
+    if (el) {
+      el.scrollBy({ left: 200, behavior: 'smooth' })
+    }
+  }, [])
+
+  // Handle tab click
+  const handleTabClick = React.useCallback(
+    (epicId: string) => {
+      setActiveTab(epicId)
+    },
+    [setActiveTab]
+  )
+
+  // Handle tab close
+  const handleCloseTab = React.useCallback(
+    (epicId: string, e: React.MouseEvent) => {
+      e.stopPropagation()
+      closeTab(epicId)
+    },
+    [closeTab]
+  )
+
+  // Handle middle-click to close
+  const handleMiddleClick = React.useCallback(
+    (epicId: string, e: React.MouseEvent) => {
+      if (e.button === 1) {
+        // Middle click
+        e.preventDefault()
+        closeTab(epicId)
+      }
+    },
+    [closeTab]
+  )
+
+  // Get epic title by ID
+  const getEpicTitle = React.useCallback(
+    (epicId: string) => {
+      const epic = epics.find((e) => e.id === epicId)
+      return epic?.title ?? epicId
+    },
+    [epics]
+  )
+
+  if (openTabs.length === 0) {
+    return null
+  }
+
+  return (
+    <div className={cn('flex items-center border-b border-border/50', className)}>
+      {/* Left scroll arrow */}
+      <AnimatePresence>
+        {showLeftArrow && (
+          <motion.div
+            initial={{ opacity: 0, width: 0 }}
+            animate={{ opacity: 1, width: 'auto' }}
+            exit={{ opacity: 0, width: 0 }}
+            transition={springTransition}
+          >
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              onClick={scrollLeft}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Tab scroll area */}
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-x-auto scrollbar-hide"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      >
+        <div className="flex items-center gap-0.5 px-1 py-1">
+          <AnimatePresence initial={false}>
+            {openTabs.map((epicId) => {
+              const isActive = epicId === activeTab
+              const title = getEpicTitle(epicId)
+
+              return (
+                <motion.div
+                  key={epicId}
+                  layout
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={springTransition}
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleTabClick(epicId)}
+                    onMouseDown={(e) => handleMiddleClick(epicId, e)}
+                    className={cn(
+                      'group relative flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-colors',
+                      'max-w-[180px] min-w-[80px]',
+                      isActive
+                        ? 'bg-foreground/10 text-foreground'
+                        : 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground'
+                    )}
+                  >
+                    <span className="truncate flex-1 text-left">{title}</span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => handleCloseTab(epicId, e)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          closeTab(epicId)
+                        }
+                      }}
+                      className={cn(
+                        'shrink-0 rounded-sm p-0.5 transition-colors',
+                        'opacity-0 group-hover:opacity-100',
+                        'hover:bg-foreground/10',
+                        isActive && 'opacity-60'
+                      )}
+                    >
+                      <X className="h-3 w-3" />
+                    </span>
+                    {/* Active indicator */}
+                    {isActive && (
+                      <motion.div
+                        layoutId="activeTabIndicator"
+                        className="absolute bottom-0 left-2 right-2 h-0.5 bg-foreground/50 rounded-full"
+                        transition={springTransition}
+                      />
+                    )}
+                  </button>
+                </motion.div>
+              )
+            })}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {/* Right scroll arrow */}
+      <AnimatePresence>
+        {showRightArrow && (
+          <motion.div
+            initial={{ opacity: 0, width: 0 }}
+            animate={{ opacity: 1, width: 'auto' }}
+            exit={{ opacity: 0, width: 0 }}
+            transition={springTransition}
+          >
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              onClick={scrollRight}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Add tab button */}
+      {onAddTab && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0 ml-1"
+          onClick={onAddTab}
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
+      )}
+    </div>
+  )
+}

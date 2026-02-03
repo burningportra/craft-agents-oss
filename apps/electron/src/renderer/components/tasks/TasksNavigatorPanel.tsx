@@ -22,9 +22,11 @@ import {
   epicsLoadingStateAtom,
   epicsErrorAtom,
   selectedEpicIdAtom,
+  activeTabAtom,
   loadEpicsAtom,
   initFlowAtom,
   resetTasksStateAtom,
+  openEpicTabAtom,
 } from '@/atoms/tasks-state'
 import { cn } from '@/lib/utils'
 
@@ -46,9 +48,11 @@ export function TasksNavigatorPanel({
   const loadingState = useAtomValue(epicsLoadingStateAtom)
   const error = useAtomValue(epicsErrorAtom)
   const [selectedEpicId, setSelectedEpicId] = useAtom(selectedEpicIdAtom)
+  const activeTab = useAtomValue(activeTabAtom)
   const loadEpics = useSetAtom(loadEpicsAtom)
   const initFlow = useSetAtom(initFlowAtom)
   const resetTasksState = useSetAtom(resetTasksStateAtom)
+  const openEpicTab = useSetAtom(openEpicTabAtom)
 
   // Track whether we're initializing (for button disabled state)
   const [isInitializing, setIsInitializing] = React.useState(false)
@@ -92,11 +96,11 @@ export function TasksNavigatorPanel({
     }
   }, [workspaceRoot, initFlow])
 
-  // Handle epic selection
+  // Handle epic selection - opens epic in a tab (or activates existing tab)
   const handleEpicClick = React.useCallback((epicId: string) => {
-    setSelectedEpicId(epicId)
+    openEpicTab(epicId)
     onEpicSelect(epicId)
-  }, [setSelectedEpicId, onEpicSelect])
+  }, [openEpicTab, onEpicSelect])
 
   // Loading state
   if (loadingState === 'loading' && epics.length === 0) {
@@ -129,7 +133,7 @@ export function TasksNavigatorPanel({
             <EpicListItem
               key={epic.id}
               epic={epic}
-              isSelected={selectedEpicId === epic.id}
+              isSelected={activeTab === epic.id || selectedEpicId === epic.id}
               onClick={() => handleEpicClick(epic.id)}
             />
           ))}

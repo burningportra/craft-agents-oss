@@ -52,9 +52,8 @@ Build the kanban board view as the main content area when an epic is selected. F
 - [ ] Keyboard sensor enables accessible drag-drop
 - [ ] Empty column shows placeholder text
 ## Done summary
-TBD
-
+Implemented Kanban board view with 4 columns (todo, in_progress, blocked, done), task cards with status/size badges, and drag-drop status changes using @dnd-kit. Features optimistic updates with rollback, keyboard accessibility, and sonner toast error feedback.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: b369ff9, 478895a
+- Tests: bun lint
 - PRs:
