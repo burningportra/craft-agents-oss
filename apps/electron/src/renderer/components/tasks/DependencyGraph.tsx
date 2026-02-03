@@ -30,7 +30,8 @@ import {
   type Viewport,
   MarkerType,
 } from '@xyflow/react'
-import dagre from '@dagrejs/dagre'
+import { graphlib } from 'dagre-d3-es'
+import { layout as dagreLayout } from 'dagre-d3-es/src/dagre/index.js'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { cn } from '@/lib/utils'
 import { TaskNodeComponent, type TaskNodeData } from './TaskNode'
@@ -159,7 +160,7 @@ function buildEdges(tasks: TaskSummary[]): Edge[] {
 function applyDagreLayout(nodes: Node[], edges: Edge[]): Node[] {
   if (nodes.length === 0) return nodes
 
-  const g = new dagre.graphlib.Graph()
+  const g = new graphlib.Graph()
   g.setGraph(DAGRE_CONFIG)
   g.setDefaultEdgeLabel(() => ({}))
 
@@ -176,7 +177,7 @@ function applyDagreLayout(nodes: Node[], edges: Edge[]): Node[] {
   }
 
   // Run dagre layout
-  dagre.layout(g)
+  dagreLayout(g)
 
   // Apply positions to nodes
   return nodes.map((node): Node => {

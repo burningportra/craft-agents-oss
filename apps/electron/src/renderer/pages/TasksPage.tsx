@@ -38,7 +38,25 @@ export function TasksPage() {
   const activeEpicId = useAtomValue(activeTabAtom)
   const openEpicTab = useSetAtom(openEpicTabAtom)
 
-  const workspaceRoot = workspace?.rootPath
+  // Project path for flow-next (where .flow/ lives) - uses process.cwd() from main process
+  // Falls back to workspace.rootPath if getCwd is unavailable or fails
+  const [projectPath, setProjectPath] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    if (typeof window.electronAPI?.getCwd === 'function') {
+      window.electronAPI.getCwd()
+        .then(setProjectPath)
+        .catch((err) => {
+          console.error('[TasksPage] Failed to get cwd, falling back to workspace.rootPath:', err)
+          setProjectPath(workspace?.rootPath ?? null)
+        })
+    } else {
+      // getCwd not available (old preload), fall back to workspace.rootPath
+      console.warn('[TasksPage] getCwd not available, using workspace.rootPath')
+      setProjectPath(workspace?.rootPath ?? null)
+    }
+  }, [workspace?.rootPath])
+
+  const workspaceRoot = projectPath
   const workspaceId = workspace?.id ?? null
 
   // Wizard dialog state - using atom so it can be triggered from AppShell header too
@@ -146,14 +164,6 @@ export function TasksPage() {
     // Split-view chat will be implemented in task 10
   }, [])
 
-  if (!workspaceRoot) {
-    return (
-      <div className="flex items-center justify-center h-full text-muted-foreground">
-        <p className="text-sm">No workspace selected</p>
-      </div>
-    )
-  }
-
   // Handle tutorial completion
   const handleTutorialComplete = React.useCallback(() => {
     setShowTutorial(false)
@@ -163,6 +173,14 @@ export function TasksPage() {
   const handleTutorialCreateEpic = React.useCallback(() => {
     setWizardOpen(true)
   }, [setWizardOpen])
+
+  if (!workspaceRoot) {
+    return (
+      <div className="flex items-center justify-center h-full text-muted-foreground">
+        <p className="text-sm">No workspace selected</p>
+      </div>
+    )
+  }
 
   return (
     <>

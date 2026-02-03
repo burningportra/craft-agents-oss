@@ -89,6 +89,7 @@ const api: ElectronAPI = {
     electron: process.versions.electron
   }),
   getHomeDir: () => ipcRenderer.invoke(IPC_CHANNELS.GET_HOME_DIR),
+  getCwd: () => ipcRenderer.invoke(IPC_CHANNELS.GET_CWD),
   isDebugMode: () => ipcRenderer.invoke(IPC_CHANNELS.IS_DEBUG_MODE),
 
   // Auto-update

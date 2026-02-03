@@ -64,9 +64,7 @@ export default defineConfig({
       'jotai',
       'filtrex',
       'pdfjs-dist',
-      // Pre-bundle to avoid reload cycle on first load
-      '@dagrejs/dagre',
-      '@dagrejs/dagre/dist/dagre.js',
+      // dagre-d3-es is ESM-native, no special handling needed
       '@radix-ui/react-tooltip',
       'react-markdown',
       'rehype-raw',

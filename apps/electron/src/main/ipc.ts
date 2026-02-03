@@ -724,6 +724,11 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return homedir()
   })
 
+  // Get current working directory (project path for flow-next)
+  ipcMain.handle(IPC_CHANNELS.GET_CWD, () => {
+    return process.cwd()
+  })
+
   // Check if running in debug mode (from source)
   ipcMain.handle(IPC_CHANNELS.IS_DEBUG_MODE, () => {
     return !app.isPackaged

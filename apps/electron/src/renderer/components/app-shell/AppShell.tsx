@@ -511,6 +511,24 @@ function AppShellContent({
   // Window width tracking for responsive behavior
   const [windowWidth, setWindowWidth] = React.useState(window.innerWidth)
 
+  // Project path for flow-next (where .flow/ lives) - uses process.cwd() from main process
+  // Falls back to workspace.rootPath if getCwd is unavailable or fails
+  const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId) ?? null
+  const [projectPath, setProjectPath] = React.useState<string | null>(null)
+  React.useEffect(() => {
+    if (typeof window.electronAPI?.getCwd === 'function') {
+      window.electronAPI.getCwd()
+        .then(setProjectPath)
+        .catch((err) => {
+          console.error('[AppShell] Failed to get cwd, falling back to workspace.rootPath:', err)
+          setProjectPath(activeWorkspace?.rootPath ?? null)
+        })
+    } else {
+      // getCwd not available (old preload), fall back to workspace.rootPath
+      setProjectPath(activeWorkspace?.rootPath ?? null)
+    }
+  }, [activeWorkspace?.rootPath])
+
   // Calculate overlay threshold dynamically based on actual sidebar widths
   // Formula: 600px (300px right sidebar + 300px center) + leftSidebar + sessionList
   // This ensures we switch to overlay mode when inline right sidebar would compress content
@@ -823,8 +841,6 @@ function AppShellContent({
       console.error('[Chat] Failed to set session labels:', err)
     }
   }, [])
-
-  const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
 
   // Load dynamic statuses from workspace config
   const { statuses: statusConfigs, isLoading: isLoadingStatuses } = useStatuses(activeWorkspace?.id || null)
@@ -1640,6 +1656,9 @@ function AppShellContent({
   const unifiedSidebarItems = React.useMemo((): SidebarItem[] => {
     const result: SidebarItem[] = []
 
+    // 0. Tasks (first for prominence)
+    result.push({ id: 'nav:tasks', type: 'nav', action: handleTasksClick })
+
     // 1. Chats section: All Chats, Flagged, States header, States items
     result.push({ id: 'nav:allChats', type: 'nav', action: handleAllChatsClick })
     result.push({ id: 'nav:flagged', type: 'nav', action: handleFlaggedClick })
@@ -1664,7 +1683,6 @@ function AppShellContent({
     // 3. Sources, Skills, Settings
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
-    result.push({ id: 'nav:tasks', type: 'nav', action: handleTasksClick })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
@@ -1966,6 +1984,16 @@ function AppShellContent({
                   getItemProps={getSidebarItemProps}
                   focusedItemId={focusedSidebarItemId}
                   links={[
+                    // --- Tasks Section (first for prominence) ---
+                    {
+                      id: "nav:tasks",
+                      title: "Tasks",
+                      icon: KanbanSquare,
+                      variant: isTasksNavigation(navState) ? "default" : "ghost",
+                      onClick: handleTasksClick,
+                    },
+                    // --- Separator ---
+                    { id: "separator:tasks-chats", type: "separator" },
                     // --- Chats Section ---
                     {
                       id: "nav:allChats",
@@ -2105,13 +2133,6 @@ function AppShellContent({
                         type: 'skills',
                         onAddSkill: openAddSkill,
                       },
-                    },
-                    {
-                      id: "nav:tasks",
-                      title: "Tasks",
-                      icon: KanbanSquare,
-                      variant: isTasksNavigation(navState) ? "default" : "ghost",
-                      onClick: handleTasksClick,
                     },
                     // --- Separator ---
                     { id: "separator:skills-settings", type: "separator" },
@@ -2856,7 +2877,7 @@ function AppShellContent({
             {isTasksNavigation(navState) && (
               /* Tasks Navigator - Epic list with progress */
               <TasksNavigatorPanel
-                workspaceRoot={activeWorkspace?.rootPath}
+                workspaceRoot={projectPath ?? undefined}
                 onEpicSelect={(epicId) => {
                   // Navigate to epic detail view (updates navigation state)
                   navigate(routes.view.epicDetail(epicId))

@@ -566,6 +566,7 @@ export const IPC_CHANNELS = {
   // System
   GET_VERSIONS: 'system:versions',
   GET_HOME_DIR: 'system:homeDir',
+  GET_CWD: 'system:cwd',
   IS_DEBUG_MODE: 'system:isDebugMode',
 
   // Auto-update
@@ -833,6 +834,7 @@ export interface ElectronAPI {
   // System
   getVersions(): { node: string; chrome: string; electron: string }
   getHomeDir(): Promise<string>
+  getCwd(): Promise<string>
   isDebugMode(): Promise<boolean>
 
   // Auto-update
