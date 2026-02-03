@@ -11,7 +11,7 @@
  * - Pan and zoom enabled
  * - Viewport state persisted per epic
  * - fitView on initial layout only
- * - Memoized dagre computation
+ * - Memoized dagre computation (only re-runs on structural changes)
  */
 
 import * as React from 'react'
@@ -33,7 +33,7 @@ import {
 import dagre from '@dagrejs/dagre'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { cn } from '@/lib/utils'
-import { TaskNodeComponent, type TaskNodeData, type TaskNode } from './TaskNode'
+import { TaskNodeComponent, type TaskNodeData } from './TaskNode'
 import type { TaskSummary } from '../../../shared/flow-schemas'
 import {
   tasksAtomFamily,
@@ -41,6 +41,7 @@ import {
   loadTasksAtom,
   graphViewportPerEpicAtomFamily,
   graphInitializedPerEpicAtomFamily,
+  graphLayoutAppliedPerEpicAtomFamily,
 } from '@/atoms/tasks-state'
 
 // Import React Flow styles
@@ -65,6 +66,7 @@ const nodeTypes: NodeTypes = {
 // Dagre layout configuration
 const DAGRE_CONFIG = {
   rankdir: 'TB' as const, // top-to-bottom
+  acyclicer: 'greedy', // Handle cyclic dependencies gracefully
   nodesep: 50,
   ranksep: 50,
   marginx: 20,
@@ -80,6 +82,14 @@ const DEFAULT_NODE_HEIGHT = 60
  */
 function centerToTopLeft(cx: number, cy: number, width: number, height: number) {
   return { x: cx - width / 2, y: cy - height / 2 }
+}
+
+/**
+ * Compute a structural key for tasks - only changes when task IDs or dependencies change
+ * Status updates don't affect this key, preventing unnecessary re-layouts
+ */
+function computeTaskStructureKey(tasks: TaskSummary[]): string {
+  return tasks.map((t) => `${t.id}:${t.depends_on.sort().join(',')}`).join('|')
 }
 
 /**
@@ -111,6 +121,7 @@ function buildNodes(tasks: TaskSummary[]): Node[] {
 
 /**
  * Build React Flow edges from task dependencies
+ * Uses 'step' edge type for orthogonal routing
  */
 function buildEdges(tasks: TaskSummary[]): Edge[] {
   const edges: Edge[] = []
@@ -124,7 +135,7 @@ function buildEdges(tasks: TaskSummary[]): Edge[] {
           id: `${depId}->${task.id}`,
           source: depId,
           target: task.id,
-          type: 'smoothstep',
+          type: 'step', // Orthogonal edges with 90-degree bends
           animated: task.status === 'in_progress',
           markerEnd: {
             type: MarkerType.ArrowClosed,
@@ -198,9 +209,14 @@ function DependencyGraphInner({
   const { fitView, setViewport } = useReactFlow()
   const nodesInitialized = useNodesInitialized()
 
-  // Viewport and initialization state per epic
+  // Viewport and initialization state per epic (fixes race condition on tab switch)
   const [savedViewport, setSavedViewport] = useAtom(graphViewportPerEpicAtomFamily(epicId))
   const [isInitialized, setIsInitialized] = useAtom(graphInitializedPerEpicAtomFamily(epicId))
+  const [layoutApplied, setLayoutApplied] = useAtom(graphLayoutAppliedPerEpicAtomFamily(epicId))
+
+  // Compute structural key - only changes when task IDs or dependencies change
+  // Status updates don't trigger re-layout (performance optimization)
+  const taskStructureKey = React.useMemo(() => computeTaskStructureKey(tasks), [tasks])
 
   // Build initial nodes and edges
   const initialNodes = React.useMemo(() => buildNodes(tasks), [tasks])
@@ -209,18 +225,23 @@ function DependencyGraphInner({
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
 
-  // Track if we've applied layout after nodes are measured
-  const [layoutApplied, setLayoutApplied] = React.useState(false)
+  // Track previous structure key to detect structural changes
+  const prevStructureKeyRef = React.useRef<string | null>(null)
 
-  // Reset layout when tasks change
+  // Reset layout only when task structure changes (not on status updates)
   React.useEffect(() => {
     const newNodes = buildNodes(tasks)
     const newEdges = buildEdges(tasks)
     setNodes(newNodes)
     setEdges(newEdges)
-    setLayoutApplied(false)
-    // Don't reset isInitialized here - we want to preserve viewport on task updates
-  }, [tasks, setNodes, setEdges])
+
+    // Only reset layout if structure actually changed
+    if (prevStructureKeyRef.current !== taskStructureKey) {
+      setLayoutApplied(false)
+      prevStructureKeyRef.current = taskStructureKey
+    }
+    // Don't reset isInitialized - we want to preserve viewport on task updates
+  }, [tasks, taskStructureKey, setNodes, setEdges, setLayoutApplied])
 
   // Apply dagre layout after nodes are measured
   React.useEffect(() => {
@@ -229,23 +250,24 @@ function DependencyGraphInner({
       setNodes(layoutedNodes)
       setLayoutApplied(true)
     }
-  }, [nodesInitialized, layoutApplied, nodes, edges, setNodes])
+  }, [nodesInitialized, layoutApplied, nodes, edges, setNodes, setLayoutApplied])
 
   // Restore saved viewport or fitView on initial layout
+  // Simplified dependencies to prevent viewport jumps
   React.useEffect(() => {
-    if (layoutApplied && nodes.length > 0) {
-      if (savedViewport && isInitialized) {
-        // Restore saved viewport
-        setViewport(savedViewport, { duration: 0 })
-      } else if (!isInitialized) {
-        // Initial fitView
-        requestAnimationFrame(() => {
-          fitView({ padding: 0.2, duration: 200 })
-          setIsInitialized(true)
-        })
-      }
+    if (!layoutApplied || nodes.length === 0) return
+
+    if (savedViewport && isInitialized) {
+      // Restore saved viewport
+      setViewport(savedViewport, { duration: 0 })
+    } else if (!isInitialized) {
+      // Initial fitView
+      requestAnimationFrame(() => {
+        fitView({ padding: 0.2, duration: 200 })
+        setIsInitialized(true)
+      })
     }
-  }, [layoutApplied, savedViewport, isInitialized, setViewport, fitView, setIsInitialized, nodes.length])
+  }, [layoutApplied, isInitialized]) // Removed nodes.length and savedViewport to prevent jumps
 
   // Save viewport on move/zoom
   const handleMoveEnd = React.useCallback(

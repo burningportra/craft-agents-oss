@@ -37,9 +37,8 @@ Build the slide-over task detail panel that opens when clicking a task card. Tab
 - [ ] Action buttons (Start, Complete) update task status via IPC
 - [ ] Escape key closes panel
 ## Done summary
-TBD
-
+Implemented slide-over task detail panel with three tabs: Spec (renders task spec as markdown), Deps (shows blocking/blocked-by tasks with clickable navigation), and Activity (displays status history with timestamps). Panel uses Radix Dialog with Motion spring animation, includes action buttons for Start/Complete status updates, and subscribes to flow:changed events for live updates.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: d5c3ecb, 9a809a1
+- Tests: bun typecheck, bun lint
 - PRs:

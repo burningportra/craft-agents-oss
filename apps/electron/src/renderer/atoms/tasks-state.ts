@@ -433,6 +433,15 @@ export const graphInitializedPerEpicAtomFamily = atomFamily(
 )
 
 /**
+ * Track whether dagre layout has been applied for each epic
+ * Per-epic state prevents race conditions when switching tabs
+ */
+export const graphLayoutAppliedPerEpicAtomFamily = atomFamily(
+  (_epicId: string) => atom<boolean>(false),
+  (a, b) => a === b
+)
+
+/**
  * Action atom: Update task status via drag-drop
  * Performs optimistic update with rollback on failure.
  * Shows sonner toast on error.

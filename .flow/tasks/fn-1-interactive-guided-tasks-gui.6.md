@@ -58,9 +58,8 @@ Add tab-based multi-epic navigation and adaptive view selection. Each open epic 
 - [ ] Inactive views stay mounted (display: none) to preserve state
 - [ ] Tab animations use springTransition from AppShell
 ## Done summary
-TBD
-
+Implemented tab-based multi-epic navigation with adaptive view selection. Added EpicTabBar for closeable tabs with scroll arrows, ViewModeSelector segmented control, ListView for small epics, and TasksMainContent to route between views. Tab state persists via atomWithStorage with validation against current workspace epics.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 5be9479cf6b23a2d0a7d73c5e8f8a8a8b8c8d8e8, 9be8d8635dfd8faa29a1419d927cc3207c5ebff6
+- Tests: bun lint
 - PRs:
