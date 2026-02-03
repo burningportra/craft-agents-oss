@@ -744,6 +744,17 @@ export const IPC_CHANNELS = {
   MENU_COPY: 'menu:copy',
   MENU_PASTE: 'menu:paste',
   MENU_SELECT_ALL: 'menu:selectAll',
+
+  // Flow-next task management
+  FLOW_EPICS_LIST: 'flow:epics-list',
+  FLOW_TASKS_LIST: 'flow:tasks-list',
+  FLOW_EPIC_SHOW: 'flow:epic-show',
+  FLOW_TASK_SHOW: 'flow:task-show',
+  FLOW_TASK_UPDATE_STATUS: 'flow:task-update-status',
+  FLOW_EPIC_CREATE: 'flow:epic-create',
+  FLOW_TASK_CREATE: 'flow:task-create',
+  FLOW_INIT: 'flow:init',
+  FLOW_CHANGED: 'flow:changed',
 } as const
 
 // Re-import types for ElectronAPI
@@ -1020,6 +1031,15 @@ export interface ElectronAPI {
   menuCopy(): Promise<void>
   menuPaste(): Promise<void>
   menuSelectAll(): Promise<void>
+
+  // Flow-next task management
+  flowEpicsList(workspaceRoot: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').EpicListResponse>>
+  flowTasksList(workspaceRoot: string, epicId: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').TaskListResponse>>
+  flowEpicShow(workspaceRoot: string, epicId: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').Epic>>
+  flowTaskShow(workspaceRoot: string, taskId: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').Task>>
+  flowTaskUpdateStatus(workspaceRoot: string, taskId: string, status: string): Promise<import('./flow-schemas').FlowBridgeResult<{ success: boolean }>>
+  flowInit(workspaceRoot: string): Promise<import('./flow-schemas').FlowBridgeResult<{ success: boolean }>>
+  onFlowChanged(callback: (workspaceRoot: string) => void): () => void
 }
 
 /**

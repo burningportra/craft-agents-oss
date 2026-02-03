@@ -57,9 +57,8 @@ Add `TasksNavigationState` to the app's navigation system, enabling the Tasks vi
 - [ ] MainContentPanel renders TasksPage placeholder when tasks navigation active
 - [ ] TypeScript compiles without errors
 ## Done summary
-TBD
-
+Added TasksNavigationState to the NavigationState union with full route builder/parser support, Tasks sidebar nav item with KanbanSquare icon, and TasksPage placeholder rendered from MainContentPanel.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 01d238dcc32ff2fbc37ce072d1625490b522ccf1
+- Tests: bun typecheck (no new errors)
 - PRs:

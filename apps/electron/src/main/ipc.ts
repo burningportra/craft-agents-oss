@@ -2488,4 +2488,46 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // Note: Permission mode cycling settings (cyclablePermissionModes) are now workspace-level
   // and managed via WORKSPACE_SETTINGS_GET/UPDATE channels
 
+  // ─── Flow-next task management ────────────────────────────────────────
+  const flowBridgeCache = new Map<string, import('./lib/flow-bridge').FlowBridge>()
+
+  function getFlowBridge(workspaceRoot: string) {
+    let bridge = flowBridgeCache.get(workspaceRoot)
+    if (!bridge) {
+      const { FlowBridge } = require('./lib/flow-bridge') as typeof import('./lib/flow-bridge')
+      bridge = new FlowBridge(workspaceRoot)
+      flowBridgeCache.set(workspaceRoot, bridge)
+    }
+    return bridge
+  }
+
+  ipcMain.handle(IPC_CHANNELS.FLOW_EPICS_LIST, (_event, workspaceRoot: string) => {
+    return getFlowBridge(workspaceRoot).listEpics()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.FLOW_TASKS_LIST, (_event, workspaceRoot: string, epicId: string) => {
+    return getFlowBridge(workspaceRoot).listTasks(epicId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.FLOW_EPIC_SHOW, (_event, workspaceRoot: string, epicId: string) => {
+    return getFlowBridge(workspaceRoot).showEpic(epicId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.FLOW_TASK_SHOW, (_event, workspaceRoot: string, taskId: string) => {
+    return getFlowBridge(workspaceRoot).showTask(taskId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.FLOW_TASK_UPDATE_STATUS, (_event, workspaceRoot: string, taskId: string, status: string) => {
+    const bridge = getFlowBridge(workspaceRoot)
+    if (status === 'in_progress') {
+      return bridge.startTask(taskId)
+    }
+    // For other status transitions, return error — flowctl uses specific subcommands
+    return { ok: false, error: { type: 'command_failed' as const, stderr: `Unsupported status transition: ${status}`, exitCode: 1 } }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.FLOW_INIT, (_event, workspaceRoot: string) => {
+    return getFlowBridge(workspaceRoot).init()
+  })
+
 }

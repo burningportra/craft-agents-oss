@@ -451,6 +451,29 @@ const api: ElectronAPI = {
   menuCopy: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_COPY),
   menuPaste: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_PASTE),
   menuSelectAll: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_SELECT_ALL),
+
+  // Flow-next task management
+  flowEpicsList: (workspaceRoot: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPICS_LIST, workspaceRoot),
+  flowTasksList: (workspaceRoot: string, epicId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_TASKS_LIST, workspaceRoot, epicId),
+  flowEpicShow: (workspaceRoot: string, epicId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPIC_SHOW, workspaceRoot, epicId),
+  flowTaskShow: (workspaceRoot: string, taskId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_TASK_SHOW, workspaceRoot, taskId),
+  flowTaskUpdateStatus: (workspaceRoot: string, taskId: string, status: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_TASK_UPDATE_STATUS, workspaceRoot, taskId, status),
+  flowInit: (workspaceRoot: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_INIT, workspaceRoot),
+  onFlowChanged: (callback: (workspaceRoot: string) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, workspaceRoot: string) => {
+      callback(workspaceRoot)
+    }
+    ipcRenderer.on(IPC_CHANNELS.FLOW_CHANGED, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.FLOW_CHANGED, handler)
+    }
+  },
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)
