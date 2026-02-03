@@ -25,7 +25,8 @@ import { EpicTabBar } from './EpicTabBar'
 import { ViewModeSelector } from './ViewModeSelector'
 import { ListView } from './ListView'
 import { KanbanBoard } from './KanbanBoard'
-import { DependencyGraph } from './DependencyGraph'
+// Lazy load DependencyGraph to avoid blocking app startup with heavy @xyflow/react import
+const DependencyGraph = React.lazy(() => import('./DependencyGraph').then(m => ({ default: m.DependencyGraph })))
 import { TaskDetailSlideOver } from './TaskDetailSlideOver'
 import { EpicChatPanel, ChatToggleButton, epicChatOpenAtom } from './EpicChatPanel'
 import {
@@ -111,12 +112,14 @@ function EpicViewContainer({
         />
       )}
       {viewMode === 'graph' && (
-        <DependencyGraph
-          epicId={epicId}
-          workspaceRoot={workspaceRoot}
-          onTaskClick={onTaskClick}
-          className="h-full"
-        />
+        <React.Suspense fallback={<div className="h-full flex items-center justify-center text-muted-foreground">Loading graph...</div>}>
+          <DependencyGraph
+            epicId={epicId}
+            workspaceRoot={workspaceRoot}
+            onTaskClick={onTaskClick}
+            className="h-full"
+          />
+        </React.Suspense>
       )}
     </div>
   )
