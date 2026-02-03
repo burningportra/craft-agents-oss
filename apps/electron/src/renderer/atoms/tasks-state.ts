@@ -527,3 +527,40 @@ export const updateTaskStatusAtom = atom(
  * Can be triggered from navigator panel header or tab bar '+' button.
  */
 export const epicWizardOpenAtom = atom<boolean>(false)
+
+// ─── AI Suggestion Sidebar State ──────────────────────────────────────────────
+
+/**
+ * Controls visibility of the AI suggestion sidebar.
+ * Persisted to localStorage so it remembers user preference.
+ * Defaults to collapsed (false).
+ */
+export const suggestionSidebarOpenAtom = atomWithStorage<boolean>(
+  'tasks-suggestion-sidebar-open',
+  false
+)
+
+/**
+ * Dismissed suggestions per epic.
+ * Each epic has a Set of suggestion IDs that have been dismissed.
+ * Persisted to localStorage per epic.
+ */
+export const dismissedSuggestionsAtomFamily = atomFamily(
+  (epicId: string) => atomWithStorage<string[]>(
+    `tasks-dismissed-suggestions-${epicId}`,
+    []
+  ),
+  (a, b) => a === b
+)
+
+/**
+ * Tracks when the "all tasks done" banner has been shown for an epic.
+ * Used to prevent repeated prompts.
+ */
+export const epicReviewPromptShownAtomFamily = atomFamily(
+  (epicId: string) => atomWithStorage<boolean>(
+    `tasks-epic-review-prompted-${epicId}`,
+    false
+  ),
+  (a, b) => a === b
+)

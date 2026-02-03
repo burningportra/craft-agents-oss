@@ -12,6 +12,7 @@
  * - Keeps inactive views mounted (display: none) to preserve state
  * - Slide-over task detail panel on task click
  * - Split-view chat panel with persistent history
+ * - Collapsible AI suggestion sidebar with contextual nudges
  */
 
 import * as React from 'react'
@@ -28,6 +29,12 @@ import { DependencyGraph } from './DependencyGraph'
 import { TaskDetailSlideOver } from './TaskDetailSlideOver'
 import { EpicChatPanel, ChatToggleButton, epicChatOpenAtom } from './EpicChatPanel'
 import {
+  AISuggestionSidebar,
+  SuggestionToggleButton,
+  useSuggestionCount,
+  type Suggestion,
+} from './AISuggestionSidebar'
+import {
   openTabsAtom,
   activeTabAtom,
   epicsAtom,
@@ -38,6 +45,7 @@ import {
   calculateEpicProgress,
   isGraphViewAvailable,
   getEffectiveViewMode,
+  suggestionSidebarOpenAtom,
   type ViewMode,
 } from '@/atoms/tasks-state'
 
@@ -149,16 +157,22 @@ function EpicViewSelector({
 }
 
 /**
- * Epic header with title, progress, view selector, and chat toggle
+ * Epic header with title, progress, view selector, chat toggle, and suggestion toggle
  */
 function EpicHeader({
   epicId,
   isChatOpen,
   onChatToggle,
+  isSuggestionSidebarOpen,
+  onSuggestionToggle,
+  suggestionCount,
 }: {
   epicId: string
   isChatOpen: boolean
   onChatToggle: () => void
+  isSuggestionSidebarOpen: boolean
+  onSuggestionToggle: () => void
+  suggestionCount: number
 }) {
   const epics = useAtomValue(epicsAtom)
   const epicsLoading = useAtomValue(epicsLoadingStateAtom)
@@ -194,6 +208,11 @@ function EpicHeader({
         </div>
         <div className="flex items-center gap-3">
           <ChatToggleButton isOpen={isChatOpen} onClick={onChatToggle} />
+          <SuggestionToggleButton
+            isOpen={isSuggestionSidebarOpen}
+            onClick={onSuggestionToggle}
+            suggestionCount={suggestionCount}
+          />
           <EpicViewSelector epicId={epicId} />
           <Badge
             variant={epic.status === 'done' ? 'secondary' : 'outline'}
@@ -242,6 +261,11 @@ export function TasksMainContent({
   // Chat panel state
   const [isChatOpen, setIsChatOpen] = useAtom(epicChatOpenAtom)
 
+  // Suggestion sidebar state
+  const [isSuggestionSidebarOpen, setIsSuggestionSidebarOpen] = useAtom(suggestionSidebarOpenAtom)
+  const suggestionCount = useSuggestionCount(activeTab)
+  const setViewMode = useSetAtom(setViewModeAtom)
+
   // Slide-over state
   const [slideOverOpen, setSlideOverOpen] = React.useState(false)
   const [selectedTaskId, setSelectedTaskId] = React.useState<string | null>(null)
@@ -251,6 +275,40 @@ export function TasksMainContent({
   const handleChatToggle = React.useCallback(() => {
     setIsChatOpen((prev) => !prev)
   }, [setIsChatOpen])
+
+  // Toggle suggestion sidebar
+  const handleSuggestionToggle = React.useCallback(() => {
+    setIsSuggestionSidebarOpen((prev) => !prev)
+  }, [setIsSuggestionSidebarOpen])
+
+  // Handle suggestion action
+  const handleSuggestionAction = React.useCallback(
+    (suggestion: Suggestion) => {
+      // Open chat panel and insert the appropriate command
+      setIsChatOpen(true)
+
+      // Map suggestion type to slash command
+      const commandMap: Record<string, string> = {
+        no_tasks: '/plan',
+        all_done: '/review',
+        no_specs: '/interview',
+        no_dependencies: '', // Just opens graph view
+        task_stuck: '', // Handled separately via onTaskClick
+      }
+
+      const command = commandMap[suggestion.type]
+      if (command) {
+        // Could dispatch to chat input here if needed
+        console.log('[TasksMainContent] Suggestion action:', suggestion.type, command)
+      }
+
+      // Special handling for 'no_dependencies' - switch to graph view
+      if (suggestion.type === 'no_dependencies' && activeTab) {
+        setViewMode(activeTab, 'graph')
+      }
+    },
+    [setIsChatOpen, activeTab, setViewMode]
+  )
 
   // Handle task click - open slide-over
   const handleTaskClick = React.useCallback(
@@ -309,6 +367,9 @@ export function TasksMainContent({
         epicId={activeTab}
         isChatOpen={isChatOpen}
         onChatToggle={handleChatToggle}
+        isSuggestionSidebarOpen={isSuggestionSidebarOpen}
+        onSuggestionToggle={handleSuggestionToggle}
+        suggestionCount={suggestionCount}
       />
 
       {/* View content area */}
@@ -337,14 +398,23 @@ export function TasksMainContent({
   )
 
   return (
-    <EpicChatPanel
+    <AISuggestionSidebar
       epicId={activeTab}
       workspaceRoot={workspaceRoot}
-      isOpen={isChatOpen}
-      onToggle={handleChatToggle}
+      isOpen={isSuggestionSidebarOpen}
+      onToggle={handleSuggestionToggle}
+      onSuggestionAction={handleSuggestionAction}
+      onTaskClick={(taskId) => handleTaskClick(activeTab, taskId)}
       className={className}
     >
-      {mainContent}
-    </EpicChatPanel>
+      <EpicChatPanel
+        epicId={activeTab}
+        workspaceRoot={workspaceRoot}
+        isOpen={isChatOpen}
+        onToggle={handleChatToggle}
+      >
+        {mainContent}
+      </EpicChatPanel>
+    </AISuggestionSidebar>
   )
 }

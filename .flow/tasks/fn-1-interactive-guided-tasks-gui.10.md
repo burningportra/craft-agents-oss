@@ -64,8 +64,7 @@ Build the split-view chat panel scoped to an epic. Persistent chat history (Inde
 - [ ] Panel resizable with persisted width (autoSaveId)
 - [ ] `idb` dependency installed
 ## Done summary
-TBD
-
+- Task completed
 ## Evidence
 - Commits:
 - Tests:
