@@ -2,10 +2,12 @@ import { execFile } from 'child_process'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import {
+  CommandSuccessSchema,
   EpicListResponseSchema,
   EpicSchema,
   TaskListResponseSchema,
   TaskSchema,
+  type CommandSuccess,
   type EpicListResponse,
   type Epic,
   type TaskListResponse,
@@ -23,6 +25,7 @@ const TIMEOUT_MS = 10_000
  * - Resolves flowctl binary per workspace (.flow/bin/flowctl first, then PATH)
  * - 10s timeout on all commands
  * - Serialized write queue (max 1 concurrent write) to prevent file lock contention
+ *   when user drags cards rapidly in the Kanban board
  * - Parses + validates output with Zod schemas
  */
 export class FlowBridge {
@@ -44,7 +47,7 @@ export class FlowBridge {
       return localPath
     }
 
-    // Fall back to PATH — will throw at exec time if not found
+    // Fall back to PATH — will fail at exec time with ENOENT if not found
     this.flowctlPath = 'flowctl'
     return 'flowctl'
   }
@@ -54,23 +57,19 @@ export class FlowBridge {
     return this.runCommand(args, schema)
   }
 
-  /** Execute a write flowctl command (serialized, max 1 concurrent) */
+  /** Execute a write flowctl command (serialized, max 1 concurrent to prevent file lock contention) */
   private execWrite<T>(args: string[], schema: ZodSchema<T>): Promise<FlowBridgeResult<T>> {
     const promise = this.writeQueue.then(() => this.runCommand(args, schema))
-    // Update queue — swallow errors so queue keeps moving
-    this.writeQueue = promise.then(() => {}, () => {})
+    // Log errors but don't propagate — keep the queue moving for subsequent writes
+    this.writeQueue = promise.catch((err) => {
+      console.error('[FlowBridge] Write operation failed:', err)
+    })
     return promise
   }
 
   private runCommand<T>(args: string[], schema: ZodSchema<T>): Promise<FlowBridgeResult<T>> {
     return new Promise((resolve) => {
-      let flowctl: string
-      try {
-        flowctl = this.resolveFlowctl()
-      } catch {
-        return resolve({ ok: false, error: { type: 'flowctl_not_found' } })
-      }
-
+      const flowctl = this.resolveFlowctl()
       const fullArgs = [...args, '--json']
 
       execFile(
@@ -115,10 +114,8 @@ export class FlowBridge {
             return resolve({
               ok: false,
               error: {
-                type: 'invalid_output',
-                zodError: new (require('zod').ZodError)([
-                  { code: 'custom', message: 'Invalid JSON output from flowctl', path: [] },
-                ]),
+                type: 'invalid_json',
+                stdout: stdout.slice(0, 500), // Truncate for safety
               },
             })
           }
@@ -160,13 +157,13 @@ export class FlowBridge {
     return this.exec(['show', taskId], TaskSchema)
   }
 
-  /** Start a task (claim it) */
-  startTask(taskId: string): Promise<FlowBridgeResult<{ success: boolean }>> {
-    return this.execWrite(['start', taskId], require('zod').z.object({ success: require('zod').z.boolean() }))
+  /** Start a task (claim it). Only status transition supported by flowctl directly. */
+  startTask(taskId: string): Promise<FlowBridgeResult<CommandSuccess>> {
+    return this.execWrite(['start', taskId], CommandSuccessSchema)
   }
 
   /** Initialize flow-next in workspace */
-  init(): Promise<FlowBridgeResult<{ success: boolean }>> {
-    return this.execWrite(['init'], require('zod').z.object({ success: require('zod').z.boolean() }))
+  init(): Promise<FlowBridgeResult<CommandSuccess>> {
+    return this.execWrite(['init'], CommandSuccessSchema)
   }
 }

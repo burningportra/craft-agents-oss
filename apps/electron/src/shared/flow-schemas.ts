@@ -105,8 +105,16 @@ export type Epic = z.infer<typeof EpicSchema>
 
 // ─── FlowBridge Error Types ──────────────────────────────────────────
 
+// ─── Reusable Command Response Schema ────────────────────────────────
+
+export const CommandSuccessSchema = z.object({ success: z.boolean() })
+export type CommandSuccess = z.infer<typeof CommandSuccessSchema>
+
+// ─── FlowBridge Error Types ──────────────────────────────────────────
+
 export type FlowBridgeError =
   | { type: 'flowctl_not_found' }
+  | { type: 'invalid_json'; stdout: string }
   | { type: 'invalid_output'; zodError: z.ZodError }
   | { type: 'command_failed'; stderr: string; exitCode: number }
   | { type: 'timeout'; command: string }

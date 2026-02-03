@@ -2517,13 +2517,8 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return getFlowBridge(workspaceRoot).showTask(taskId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.FLOW_TASK_UPDATE_STATUS, (_event, workspaceRoot: string, taskId: string, status: string) => {
-    const bridge = getFlowBridge(workspaceRoot)
-    if (status === 'in_progress') {
-      return bridge.startTask(taskId)
-    }
-    // For other status transitions, return error — flowctl uses specific subcommands
-    return { ok: false, error: { type: 'command_failed' as const, stderr: `Unsupported status transition: ${status}`, exitCode: 1 } }
+  ipcMain.handle(IPC_CHANNELS.FLOW_TASK_START, (_event, workspaceRoot: string, taskId: string) => {
+    return getFlowBridge(workspaceRoot).startTask(taskId)
   })
 
   ipcMain.handle(IPC_CHANNELS.FLOW_INIT, (_event, workspaceRoot: string) => {

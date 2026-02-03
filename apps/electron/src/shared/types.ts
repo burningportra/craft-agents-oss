@@ -750,9 +750,7 @@ export const IPC_CHANNELS = {
   FLOW_TASKS_LIST: 'flow:tasks-list',
   FLOW_EPIC_SHOW: 'flow:epic-show',
   FLOW_TASK_SHOW: 'flow:task-show',
-  FLOW_TASK_UPDATE_STATUS: 'flow:task-update-status',
-  FLOW_EPIC_CREATE: 'flow:epic-create',
-  FLOW_TASK_CREATE: 'flow:task-create',
+  FLOW_TASK_START: 'flow:task-start',
   FLOW_INIT: 'flow:init',
   FLOW_CHANGED: 'flow:changed',
 } as const
@@ -1037,8 +1035,8 @@ export interface ElectronAPI {
   flowTasksList(workspaceRoot: string, epicId: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').TaskListResponse>>
   flowEpicShow(workspaceRoot: string, epicId: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').Epic>>
   flowTaskShow(workspaceRoot: string, taskId: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').Task>>
-  flowTaskUpdateStatus(workspaceRoot: string, taskId: string, status: string): Promise<import('./flow-schemas').FlowBridgeResult<{ success: boolean }>>
-  flowInit(workspaceRoot: string): Promise<import('./flow-schemas').FlowBridgeResult<{ success: boolean }>>
+  flowTaskStart(workspaceRoot: string, taskId: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').CommandSuccess>>
+  flowInit(workspaceRoot: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').CommandSuccess>>
   onFlowChanged(callback: (workspaceRoot: string) => void): () => void
 }
 
