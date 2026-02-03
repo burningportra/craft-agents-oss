@@ -2560,4 +2560,26 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return getFlowBridge(workspaceRoot).init()
   })
 
+  // Flow notifications
+  ipcMain.handle(IPC_CHANNELS.FLOW_SHOW_NOTIFICATION, (_event, params: {
+    type: string
+    title: string
+    body: string
+    workspaceId: string
+    epicId?: string
+    taskId?: string
+    priority?: 'high' | 'low'
+  }) => {
+    const { showFlowNotification } = require('./lib/flow-notifications') as typeof import('./lib/flow-notifications')
+    showFlowNotification({
+      type: params.type as import('./lib/flow-notifications').FlowNotificationType,
+      title: params.title,
+      body: params.body,
+      workspaceId: params.workspaceId,
+      epicId: params.epicId,
+      taskId: params.taskId,
+      priority: params.priority,
+    })
+  })
+
 }

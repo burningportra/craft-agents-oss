@@ -373,7 +373,7 @@ export function TasksMainContent({
       />
 
       {/* View content area */}
-      <div className="flex-1 relative min-h-0">
+      <div className="flex-1 relative min-h-0" data-tutorial="kanban-area">
         {openTabs.map((epicId) => (
           <EpicViewContainer
             key={epicId}

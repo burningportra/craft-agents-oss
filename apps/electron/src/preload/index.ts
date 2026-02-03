@@ -476,6 +476,27 @@ const api: ElectronAPI = {
       ipcRenderer.removeListener(IPC_CHANNELS.FLOW_CHANGED, handler)
     }
   },
+
+  // Flow notifications
+  onFlowNotificationNavigate: (callback: (event: { type: string; epicId?: string; taskId?: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: { type: string; epicId?: string; taskId?: string }) => {
+      callback(payload)
+    }
+    ipcRenderer.on(IPC_CHANNELS.FLOW_NOTIFICATION_NAVIGATE, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.FLOW_NOTIFICATION_NAVIGATE, handler)
+    }
+  },
+  showFlowNotification: (params: {
+    type: string
+    title: string
+    body: string
+    workspaceId: string
+    epicId?: string
+    taskId?: string
+    priority?: 'high' | 'low'
+  }) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_SHOW_NOTIFICATION, params),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

@@ -62,9 +62,8 @@ Build the collapsible AI suggestion sidebar that analyzes current epic/task stat
 - [ ] No suggestions shown when .flow/ doesn't exist
 - [ ] "All tasks done" triggers auto-prompt for epic review (banner/toast)
 ## Done summary
-TBD
-
+Added collapsible AI suggestion sidebar with rule-based contextual nudges. Features include debounced suggestion re-evaluation (500ms), max 3 prioritized suggestions, dismissable suggestions per epic, smooth Motion animations, and auto-prompt banner/toast when all tasks are done.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: dcb9fa7
+- Tests: bun typecheck (electron app)
 - PRs:

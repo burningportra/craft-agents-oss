@@ -8,6 +8,7 @@
  * - User can override view with segmented control
  * - Persists tab and view state across sessions
  * - Epic creation wizard (Quick/Standard/Complex templates)
+ * - Onboarding tutorial for first-time users
  */
 
 import * as React from 'react'
@@ -16,19 +17,49 @@ import { useNavigationState, isTasksNavigation } from '@/contexts/NavigationCont
 import { useActiveWorkspace } from '@/context/AppShellContext'
 import { TasksMainContent } from '@/components/tasks/TasksMainContent'
 import { EpicCreationWizard } from '@/components/tasks/EpicCreationWizard'
-import { epicsAtom, openEpicTabAtom, epicWizardOpenAtom } from '@/atoms/tasks-state'
+import { OnboardingTutorial, useOnboardingComplete, markOnboardingComplete } from '@/components/tasks/OnboardingTutorial'
+import { epicsAtom, epicsLoadingStateAtom, openEpicTabAtom, epicWizardOpenAtom } from '@/atoms/tasks-state'
 import { navigate, routes } from '@/lib/navigate'
 
 export function TasksPage() {
   const navState = useNavigationState()
   const workspace = useActiveWorkspace()
   const epics = useAtomValue(epicsAtom)
+  const epicsLoadingState = useAtomValue(epicsLoadingStateAtom)
   const openEpicTab = useSetAtom(openEpicTabAtom)
 
   const workspaceRoot = workspace?.rootPath
 
   // Wizard dialog state - using atom so it can be triggered from AppShell header too
   const [wizardOpen, setWizardOpen] = useAtom(epicWizardOpenAtom)
+
+  // Onboarding tutorial state
+  const isOnboardingComplete = useOnboardingComplete()
+  const [showTutorial, setShowTutorial] = React.useState(false)
+  const previousLoadingStateRef = React.useRef<string | null>(null)
+
+  // Trigger tutorial after first successful .flow/ initialization
+  // Detected by: loading state transitions from 'error' (no-flow-directory) to 'success'
+  React.useEffect(() => {
+    const prevState = previousLoadingStateRef.current
+
+    // Check if we just transitioned from error/idle to success with 0 epics
+    // This indicates a fresh initialization
+    if (
+      !isOnboardingComplete &&
+      epicsLoadingState === 'success' &&
+      epics.length === 0 &&
+      (prevState === 'error' || prevState === 'idle')
+    ) {
+      // Small delay to let the UI settle
+      const timer = setTimeout(() => {
+        setShowTutorial(true)
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+
+    previousLoadingStateRef.current = epicsLoadingState
+  }, [epicsLoadingState, epics.length, isOnboardingComplete])
 
   // Handle task click - could open detail panel (task 7)
   const handleTaskClick = React.useCallback((epicId: string, taskId: string) => {
@@ -62,6 +93,16 @@ export function TasksPage() {
     )
   }
 
+  // Handle tutorial completion
+  const handleTutorialComplete = React.useCallback(() => {
+    setShowTutorial(false)
+  }, [])
+
+  // Handle create epic from tutorial - opens wizard
+  const handleTutorialCreateEpic = React.useCallback(() => {
+    setWizardOpen(true)
+  }, [setWizardOpen])
+
   return (
     <>
       <TasksMainContent
@@ -79,6 +120,13 @@ export function TasksPage() {
         epics={epics}
         onEpicCreated={handleEpicCreated}
         onOpenChat={handleOpenChat}
+      />
+
+      {/* Onboarding Tutorial */}
+      <OnboardingTutorial
+        isActive={showTutorial}
+        onComplete={handleTutorialComplete}
+        onCreateEpic={handleTutorialCreateEpic}
       />
     </>
   )

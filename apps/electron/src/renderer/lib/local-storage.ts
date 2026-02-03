@@ -42,6 +42,9 @@ export const KEYS = {
 
   // TurnCard expansion state (persisted across session switches)
   turnCardExpansion: 'turncard-expansion',
+
+  // Flow Tasks onboarding
+  flowTasksOnboardingComplete: 'flow-tasks-onboarding-complete',
 } as const
 
 export type StorageKey = typeof KEYS[keyof typeof KEYS]

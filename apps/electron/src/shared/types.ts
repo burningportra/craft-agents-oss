@@ -754,6 +754,9 @@ export const IPC_CHANNELS = {
   FLOW_TASK_UPDATE_STATUS: 'flow:task-update-status',
   FLOW_INIT: 'flow:init',
   FLOW_CHANGED: 'flow:changed',
+  // Flow notifications
+  FLOW_NOTIFICATION_NAVIGATE: 'flow:notification-navigate',
+  FLOW_SHOW_NOTIFICATION: 'flow:show-notification',
 } as const
 
 // Re-import types for ElectronAPI
@@ -1040,6 +1043,18 @@ export interface ElectronAPI {
   flowTaskUpdateStatus(workspaceRoot: string, taskId: string, status: import('./flow-schemas').TaskStatus): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').CommandSuccess>>
   flowInit(workspaceRoot: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').CommandSuccess>>
   onFlowChanged(callback: (workspaceRoot: string, payload: { type: 'epic' | 'task' | 'config'; id?: string }) => void): () => void
+
+  // Flow notifications
+  onFlowNotificationNavigate(callback: (event: { type: string; epicId?: string; taskId?: string }) => void): () => void
+  showFlowNotification(params: {
+    type: string
+    title: string
+    body: string
+    workspaceId: string
+    epicId?: string
+    taskId?: string
+    priority?: 'high' | 'low'
+  }): Promise<void>
 }
 
 /**

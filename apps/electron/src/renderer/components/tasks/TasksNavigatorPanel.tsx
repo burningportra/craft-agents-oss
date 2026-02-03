@@ -126,7 +126,7 @@ export function TasksNavigatorPanel({
 
   // Epic list
   return (
-    <div className={cn('flex flex-col flex-1 min-h-0', className)}>
+    <div className={cn('flex flex-col flex-1 min-h-0', className)} data-tutorial="epic-list">
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-1">
           {epics.map((epic) => (
