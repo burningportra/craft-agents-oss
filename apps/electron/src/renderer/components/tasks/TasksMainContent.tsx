@@ -18,7 +18,7 @@
 import * as React from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
-import { KanbanSquare } from 'lucide-react'
+import { KanbanSquare, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { EpicTabBar } from './EpicTabBar'
@@ -343,18 +343,34 @@ export function TasksMainContent({
     []
   )
 
-  // No tabs open - show empty state
+  // No tabs open - show empty state with create button
   if (openTabs.length === 0 || !activeTab) {
     return (
       <div
         className={cn(
-          'flex flex-col items-center justify-center h-full gap-3 text-muted-foreground',
+          'flex flex-col items-center justify-center h-full gap-4 text-muted-foreground',
           className
         )}
       >
         <KanbanSquare className="h-10 w-10 opacity-40" />
-        <p className="text-sm font-medium">Tasks</p>
-        <p className="text-xs opacity-60">Select an epic to view its tasks</p>
+        <div className="text-center">
+          <p className="text-sm font-medium">Tasks</p>
+          <p className="text-xs opacity-60 mt-1">Select an epic or create a new one</p>
+        </div>
+        {onAddTab && (
+          <button
+            onClick={onAddTab}
+            data-tutorial="create-epic-button"
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+              'bg-foreground text-background hover:bg-foreground/90',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+            )}
+          >
+            <Plus className="h-4 w-4" />
+            Create Epic
+          </button>
+        )}
       </div>
     )
   }
