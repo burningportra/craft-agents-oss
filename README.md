@@ -88,7 +88,7 @@ irm https://agents.craft.do/install-app.ps1 | iex
 
 ```bash
 # This fork (with Tasks GUI)
-git clone https://github.com/kevtrinh/craft-agents-oss.git
+git clone https://github.com/burningportra/craft-agents-oss.git
 cd craft-agents-oss
 bun install
 bun run electron:start
