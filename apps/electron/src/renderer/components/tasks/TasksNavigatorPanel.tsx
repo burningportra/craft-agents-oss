@@ -79,18 +79,18 @@ export function TasksNavigatorPanel({
   }, [workspaceRoot, loadEpics])
 
   // Handle Initialize button click
+  // Relies on flow:changed event to trigger reload (avoids race condition)
   const handleInitialize = React.useCallback(async () => {
     if (!workspaceRoot) return
 
     setIsInitializing(true)
     try {
       await initFlow(workspaceRoot)
-      // Reload epics after init (the flow:changed event may also trigger this)
-      await loadEpics(workspaceRoot)
+      // Don't manually reload - flow:changed event will trigger loadEpics
     } finally {
       setIsInitializing(false)
     }
-  }, [workspaceRoot, initFlow, loadEpics])
+  }, [workspaceRoot, initFlow])
 
   // Handle epic selection
   const handleEpicClick = React.useCallback((epicId: string) => {

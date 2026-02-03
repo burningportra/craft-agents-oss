@@ -10,7 +10,7 @@ import * as React from 'react'
 import { useAtomValue } from 'jotai'
 import { KanbanSquare, ListTodo } from 'lucide-react'
 import { useNavigationState, isTasksNavigation } from '@/contexts/NavigationContext'
-import { selectedEpicAtom, epicsAtom } from '@/atoms/tasks-state'
+import { selectedEpicAtom, epicsAtom, calculateEpicProgress } from '@/atoms/tasks-state'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
@@ -40,9 +40,7 @@ export function TasksPage() {
   }
 
   // Show epic info with task progress (kanban board comes in task 5)
-  const progressPercent = displayEpic.tasks > 0
-    ? Math.round((displayEpic.done / displayEpic.tasks) * 100)
-    : 0
+  const progressPercent = calculateEpicProgress(displayEpic)
 
   return (
     <div className="flex flex-col h-full">

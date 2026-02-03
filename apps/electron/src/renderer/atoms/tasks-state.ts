@@ -10,6 +10,20 @@ import { atomWithStorage } from 'jotai/utils'
 import { atomFamily } from 'jotai-family'
 import type { EpicSummary, TaskSummary, FlowBridgeResult, EpicListResponse, TaskListResponse } from '../../shared/flow-schemas'
 
+// ─── Utils ───────────────────────────────────────────────────────────────────
+
+/**
+ * Calculate epic progress as a percentage (0-100)
+ * Handles edge cases: zero tasks, done status override
+ */
+export function calculateEpicProgress(epic: EpicSummary): number {
+  // If status is done, always return 100 for visual consistency
+  if (epic.status === 'done') return 100
+  // Avoid division by zero
+  if (epic.tasks === 0) return 0
+  return Math.round((epic.done / epic.tasks) * 100)
+}
+
 // ─── Loading State ───────────────────────────────────────────────────────────
 
 /**
@@ -120,8 +134,16 @@ export const loadEpicsAtom = atom(
         if (result.error.type === 'flowctl_not_found') {
           errorMsg = 'flowctl not found - .flow/ may not be initialized'
         } else if (result.error.type === 'command_failed') {
-          // Check if it's "no .flow directory" error
-          if (result.error.stderr.includes('.flow') || result.error.exitCode === 1) {
+          // Check if it's "no .flow directory" error - use specific exit code
+          // flowctl returns exit code 1 with "not found" or "no such" in stderr
+          const stderr = result.error.stderr.toLowerCase()
+          const isNoFlowDir = result.error.exitCode === 1 && (
+            stderr.includes('not found') ||
+            stderr.includes('no such') ||
+            stderr.includes('does not exist') ||
+            stderr.includes('not initialized')
+          )
+          if (isNoFlowDir) {
             errorMsg = 'no-flow-directory'
           } else {
             errorMsg = result.error.stderr || 'Command failed'
@@ -166,6 +188,8 @@ export const loadTasksAtom = atom(
 
 /**
  * Action atom: Initialize flow-next in the workspace
+ * After successful init, relies on flow:changed event to trigger reload
+ * (avoids race condition from duplicate IPC calls)
  */
 export const initFlowAtom = atom(
   null,
@@ -176,10 +200,10 @@ export const initFlowAtom = atom(
       const result = await window.electronAPI.flowInit(workspaceRoot)
 
       if (result.ok) {
-        // Reload epics after successful init
-        // Note: The flow:changed event will trigger a reload, but we also do it here
-        // for immediate feedback
+        // Clear error state - the flow:changed event will trigger a reload
+        // Don't manually reload here to avoid race condition with event handler
         set(epicsErrorAtom, null)
+        // Set to idle so the flow:changed handler can transition to loading
         set(epicsLoadingStateAtom, 'idle')
       } else {
         set(epicsErrorAtom, 'Failed to initialize flow-next')
@@ -194,6 +218,7 @@ export const initFlowAtom = atom(
 
 /**
  * Action atom: Reset all tasks state (for workspace changes)
+ * Clears selected epic to prevent cross-workspace selection bugs
  */
 export const resetTasksStateAtom = atom(
   null,
@@ -201,6 +226,7 @@ export const resetTasksStateAtom = atom(
     set(epicsAtom, [])
     set(epicsLoadingStateAtom, 'idle')
     set(epicsErrorAtom, null)
-    // Note: selectedEpicIdAtom is persisted, so we don't reset it
+    // Clear selection on workspace change to prevent cross-workspace selection bugs
+    set(selectedEpicIdAtom, null)
   }
 )

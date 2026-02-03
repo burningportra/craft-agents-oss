@@ -8,6 +8,7 @@
 import * as React from 'react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { calculateEpicProgress } from '@/atoms/tasks-state'
 import type { EpicSummary } from '../../../shared/flow-schemas'
 
 export interface EpicListItemProps {
@@ -17,7 +18,7 @@ export interface EpicListItemProps {
 }
 
 export function EpicListItem({ epic, isSelected, onClick }: EpicListItemProps) {
-  const progressPercent = epic.tasks > 0 ? Math.round((epic.done / epic.tasks) * 100) : 0
+  const progressPercent = calculateEpicProgress(epic)
 
   return (
     <button
