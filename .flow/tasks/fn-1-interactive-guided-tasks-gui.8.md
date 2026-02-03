@@ -60,9 +60,8 @@ Build the read-only dependency graph visualization using @xyflow/react and @dagr
 - [ ] Dagre computation memoized (re-runs only on node/edge change)
 - [ ] Empty state when epic has no dependencies
 ## Done summary
-TBD
-
+Implemented read-only dependency graph visualization using @xyflow/react and @dagrejs/dagre. Graph renders task nodes with status colors and size badges, connected by orthogonal edges. Includes per-epic viewport state persistence, dagre auto-layout (top-to-bottom), and optimized re-layout only on structural changes.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 1bad5f4, 1accba2
+- Tests: bun run lint, bun run build:renderer
 - PRs:

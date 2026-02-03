@@ -519,3 +519,11 @@ export const updateTaskStatusAtom = atom(
     }
   }
 )
+
+// ─── Epic Creation Wizard State ───────────────────────────────────────────────
+
+/**
+ * Controls visibility of the epic creation wizard dialog.
+ * Can be triggered from navigator panel header or tab bar '+' button.
+ */
+export const epicWizardOpenAtom = atom<boolean>(false)

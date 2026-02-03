@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useRef, useState, useEffect, useCallback, useMemo } from "react"
-import { useAtomValue } from "jotai"
+import { useAtomValue, useSetAtom } from "jotai"
 import { motion, AnimatePresence } from "motion/react"
 import {
   CheckCircle2,
@@ -78,7 +78,6 @@ import { getResizeGradientStyle } from "@/hooks/useResizeGradient"
 import { useFocusZone, useGlobalShortcuts } from "@/hooks/keyboard"
 import { useFocusContext } from "@/context/FocusContext"
 import { getSessionTitle } from "@/utils/session"
-import { useSetAtom } from "jotai"
 import type { Session, Workspace, FileAttachment, PermissionRequest, LoadedSource, LoadedSkill, PermissionMode, SourceFilter } from "../../../shared/types"
 import { sessionMetaMapAtom, type SessionMeta } from "@/atoms/sessions"
 import { sourcesAtom } from "@/atoms/sources"
@@ -110,6 +109,7 @@ import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
 import { TasksNavigatorPanel } from "../tasks/TasksNavigatorPanel"
+import { epicWizardOpenAtom } from "@/atoms/tasks-state"
 import { PanelHeader } from "./PanelHeader"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
 import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
@@ -738,6 +738,9 @@ function AppShellContent({
   const [skills, setSkills] = React.useState<LoadedSkill[]>([])
   // Sync skills to atom for NavigationContext auto-selection
   const setSkillsAtom = useSetAtom(skillsAtom)
+
+  // Epic creation wizard trigger (shared with TasksPage)
+  const setEpicWizardOpen = useSetAtom(epicWizardOpenAtom)
   React.useEffect(() => {
     setSkillsAtom(skills)
   }, [skills, setSkillsAtom])
@@ -2813,6 +2816,14 @@ function AppShellContent({
                         />
                       }
                       {...getEditConfig('add-skill', activeWorkspace.rootPath)}
+                    />
+                  )}
+                  {/* Add Epic button (only for tasks mode) */}
+                  {isTasksNavigation(navState) && (
+                    <HeaderIconButton
+                      icon={<Plus className="h-4 w-4" />}
+                      tooltip="Create Epic"
+                      onClick={() => setEpicWizardOpen(true)}
                     />
                   )}
                 </>
