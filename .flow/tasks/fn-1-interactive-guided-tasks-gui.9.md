@@ -59,9 +59,8 @@ Build the epic creation wizard triggered by the '+' button. Three complexity tie
 - [ ] Loading state while IPC calls execute
 - [ ] Error handling with retry option on failure
 ## Done summary
-TBD
-
+Implemented epic creation wizard with Quick, Standard, and Complex templates as a modal dialog triggered from both the tab bar '+' button and navigator panel header. Added Zod validation schemas, full accessibility support (keyboard navigation, ARIA), abort signal handling for memory leak prevention, and comprehensive data-testid attributes for E2E testing.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 6023da6, 09beb93
+- Tests: npx tsc --noEmit -p apps/electron/tsconfig.json
 - PRs:

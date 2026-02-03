@@ -11,6 +11,7 @@
  * - Persists view preference per epic
  * - Keeps inactive views mounted (display: none) to preserve state
  * - Slide-over task detail panel on task click
+ * - Split-view chat panel with persistent history
  */
 
 import * as React from 'react'
@@ -25,6 +26,7 @@ import { ListView } from './ListView'
 import { KanbanBoard } from './KanbanBoard'
 import { DependencyGraph } from './DependencyGraph'
 import { TaskDetailSlideOver } from './TaskDetailSlideOver'
+import { EpicChatPanel, ChatToggleButton, epicChatOpenAtom } from './EpicChatPanel'
 import {
   openTabsAtom,
   activeTabAtom,
@@ -147,9 +149,17 @@ function EpicViewSelector({
 }
 
 /**
- * Epic header with title, progress, and view selector
+ * Epic header with title, progress, view selector, and chat toggle
  */
-function EpicHeader({ epicId }: { epicId: string }) {
+function EpicHeader({
+  epicId,
+  isChatOpen,
+  onChatToggle,
+}: {
+  epicId: string
+  isChatOpen: boolean
+  onChatToggle: () => void
+}) {
   const epics = useAtomValue(epicsAtom)
   const epicsLoading = useAtomValue(epicsLoadingStateAtom)
   const epic = epics.find((e) => e.id === epicId)
@@ -183,6 +193,7 @@ function EpicHeader({ epicId }: { epicId: string }) {
           <p className="text-sm text-muted-foreground mt-0.5">{epic.id}</p>
         </div>
         <div className="flex items-center gap-3">
+          <ChatToggleButton isOpen={isChatOpen} onClick={onChatToggle} />
           <EpicViewSelector epicId={epicId} />
           <Badge
             variant={epic.status === 'done' ? 'secondary' : 'outline'}
@@ -228,10 +239,18 @@ export function TasksMainContent({
   const openTabs = useAtomValue(openTabsAtom)
   const activeTab = useAtomValue(activeTabAtom)
 
+  // Chat panel state
+  const [isChatOpen, setIsChatOpen] = useAtom(epicChatOpenAtom)
+
   // Slide-over state
   const [slideOverOpen, setSlideOverOpen] = React.useState(false)
   const [selectedTaskId, setSelectedTaskId] = React.useState<string | null>(null)
   const [selectedTaskEpicId, setSelectedTaskEpicId] = React.useState<string | null>(null)
+
+  // Toggle chat panel
+  const handleChatToggle = React.useCallback(() => {
+    setIsChatOpen((prev) => !prev)
+  }, [setIsChatOpen])
 
   // Handle task click - open slide-over
   const handleTaskClick = React.useCallback(
@@ -279,13 +298,18 @@ export function TasksMainContent({
     )
   }
 
-  return (
-    <div className={cn('flex flex-col h-full', className)}>
+  // Main content (tab bar, header, view)
+  const mainContent = (
+    <div className="flex flex-col h-full">
       {/* Tab bar */}
       <EpicTabBar onAddTab={onAddTab} />
 
       {/* Epic header (for active tab) */}
-      <EpicHeader epicId={activeTab} />
+      <EpicHeader
+        epicId={activeTab}
+        isChatOpen={isChatOpen}
+        onChatToggle={handleChatToggle}
+      />
 
       {/* View content area */}
       <div className="flex-1 relative min-h-0">
@@ -310,5 +334,17 @@ export function TasksMainContent({
         onTaskNavigate={handleTaskNavigate}
       />
     </div>
+  )
+
+  return (
+    <EpicChatPanel
+      epicId={activeTab}
+      workspaceRoot={workspaceRoot}
+      isOpen={isChatOpen}
+      onToggle={handleChatToggle}
+      className={className}
+    >
+      {mainContent}
+    </EpicChatPanel>
   )
 }
