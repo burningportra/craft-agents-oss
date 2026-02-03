@@ -34,7 +34,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'chats' | 'sources' | 'skills' | 'settings'
+export type NavigatorType = 'chats' | 'sources' | 'skills' | 'settings' | 'tasks'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -58,7 +58,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allChats', 'flagged', 'state', 'label', 'view', 'sources', 'skills', 'settings'
+  'allChats', 'flagged', 'state', 'label', 'view', 'sources', 'skills', 'settings', 'tasks'
 ]
 
 /**
@@ -155,6 +155,35 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     return null
   }
 
+  // Tasks navigator
+  if (first === 'tasks') {
+    if (segments.length === 1) {
+      return { navigator: 'tasks', details: null }
+    }
+    // tasks/:epicId/graph
+    if (segments.length === 3 && segments[2] === 'graph') {
+      return {
+        navigator: 'tasks',
+        details: { type: 'graph', id: segments[1] },
+      }
+    }
+    // tasks/:epicId/:taskId
+    if (segments.length === 3) {
+      return {
+        navigator: 'tasks',
+        details: { type: 'task', id: `${segments[1]}/${segments[2]}` },
+      }
+    }
+    // tasks/:epicId
+    if (segments.length === 2) {
+      return {
+        navigator: 'tasks',
+        details: { type: 'epic', id: segments[1] },
+      }
+    }
+    return null
+  }
+
   // Chats navigator (allChats, flagged, state)
   let chatFilter: ChatFilter
   let detailsStartIndex: number
@@ -231,6 +260,14 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   if (parsed.navigator === 'skills') {
     if (!parsed.details) return 'skills'
     return `skills/skill/${parsed.details.id}`
+  }
+
+  if (parsed.navigator === 'tasks') {
+    if (!parsed.details) return 'tasks'
+    if (parsed.details.type === 'epic') return `tasks/${parsed.details.id}`
+    if (parsed.details.type === 'graph') return `tasks/${parsed.details.id}/graph`
+    if (parsed.details.type === 'task') return `tasks/${parsed.details.id}`
+    return 'tasks'
   }
 
   // Chats navigator
@@ -343,6 +380,14 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
       return { type: 'view', name: 'skills', params: {} }
     }
     return { type: 'view', name: 'skill-info', id: compound.details.id, params: {} }
+  }
+
+  // Tasks
+  if (compound.navigator === 'tasks') {
+    if (!compound.details) {
+      return { type: 'view', name: 'tasks', params: {} }
+    }
+    return { type: 'view', name: `tasks-${compound.details.type}`, id: compound.details.id, params: {} }
   }
 
   // Chats
@@ -462,6 +507,25 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     }
   }
 
+  // Tasks
+  if (compound.navigator === 'tasks') {
+    if (!compound.details) {
+      return { navigator: 'tasks', details: null }
+    }
+    if (compound.details.type === 'epic') {
+      return { navigator: 'tasks', details: { type: 'epic', epicId: compound.details.id } }
+    }
+    if (compound.details.type === 'graph') {
+      return { navigator: 'tasks', details: { type: 'graph', epicId: compound.details.id } }
+    }
+    if (compound.details.type === 'task') {
+      // id is "epicId/taskId"
+      const [epicId, taskId] = compound.details.id.split('/')
+      return { navigator: 'tasks', details: { type: 'task', epicId, taskId } }
+    }
+    return { navigator: 'tasks', details: null }
+  }
+
   // Chats
   const filter = compound.chatFilter || { kind: 'allChats' as const }
   if (compound.details) {
@@ -526,6 +590,24 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
         }
       }
       return { navigator: 'skills', details: null }
+    case 'tasks':
+      return { navigator: 'tasks', details: null }
+    case 'tasks-epic':
+      if (parsed.id) {
+        return { navigator: 'tasks', details: { type: 'epic', epicId: parsed.id } }
+      }
+      return { navigator: 'tasks', details: null }
+    case 'tasks-task':
+      if (parsed.id) {
+        const [epicId, taskId] = parsed.id.split('/')
+        return { navigator: 'tasks', details: { type: 'task', epicId, taskId } }
+      }
+      return { navigator: 'tasks', details: null }
+    case 'tasks-graph':
+      if (parsed.id) {
+        return { navigator: 'tasks', details: { type: 'graph', epicId: parsed.id } }
+      }
+      return { navigator: 'tasks', details: null }
     case 'chat':
       if (parsed.id) {
         // Reconstruct filter from params
@@ -616,6 +698,19 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
       return `skills/skill/${state.details.skillSlug}`
     }
     return 'skills'
+  }
+
+  if (state.navigator === 'tasks') {
+    if (state.details?.type === 'task') {
+      return `tasks/${state.details.epicId}/${state.details.taskId}`
+    }
+    if (state.details?.type === 'graph') {
+      return `tasks/${state.details.epicId}/graph`
+    }
+    if (state.details?.type === 'epic') {
+      return `tasks/${state.details.epicId}`
+    }
+    return 'tasks'
   }
 
   // Chats

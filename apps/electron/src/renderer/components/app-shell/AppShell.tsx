@@ -24,6 +24,7 @@ import {
   FolderOpen,
   HelpCircle,
   ExternalLink,
+  KanbanSquare,
 } from "lucide-react"
 import { PanelRightRounded } from "../icons/PanelRightRounded"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
@@ -101,6 +102,7 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isTasksNavigation,
   type NavigationState,
   type ChatFilter,
 } from "@/contexts/NavigationContext"
@@ -1449,6 +1451,11 @@ function AppShellContent({
     navigate(routes.view.skills())
   }, [])
 
+  // Handler for tasks view
+  const handleTasksClick = useCallback(() => {
+    navigate(routes.view.tasks())
+  }, [])
+
   // Handler for settings view
   const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {
     navigate(routes.view.settings(subpage))
@@ -1653,10 +1660,11 @@ function AppShellContent({
     // 3. Sources, Skills, Settings
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
+    result.push({ id: 'nav:tasks', type: 'nav', action: handleTasksClick })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
 
     return result
-  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, effectiveTodoStates, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleSettingsClick])
+  }, [handleAllChatsClick, handleFlaggedClick, handleTodoStateClick, effectiveTodoStates, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleTasksClick, handleSettingsClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -1774,6 +1782,9 @@ function AppShellContent({
     if (isSkillsNavigation(navState)) {
       return 'All Skills'
     }
+
+    // Tasks navigator
+    if (isTasksNavigation(navState)) return 'Tasks'
 
     // Settings navigator
     if (isSettingsNavigation(navState)) return 'Settings'
@@ -2090,6 +2101,13 @@ function AppShellContent({
                         type: 'skills',
                         onAddSkill: openAddSkill,
                       },
+                    },
+                    {
+                      id: "nav:tasks",
+                      title: "Tasks",
+                      icon: KanbanSquare,
+                      variant: isTasksNavigation(navState) ? "default" : "ghost",
+                      onClick: handleTasksClick,
                     },
                     // --- Separator ---
                     { id: "separator:skills-settings", type: "separator" },

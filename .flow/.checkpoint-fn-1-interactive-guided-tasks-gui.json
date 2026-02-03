@@ -1,0 +1,272 @@
+{
+  "created_at": "2026-02-03T03:34:37.439642Z",
+  "epic": {
+    "data": {
+      "branch_name": "fn-1-interactive-guided-tasks-gui",
+      "created_at": "2026-02-03T03:16:15.726708Z",
+      "depends_on_epics": [],
+      "id": "fn-1-interactive-guided-tasks-gui",
+      "next_task": 1,
+      "plan_review_status": "unknown",
+      "plan_reviewed_at": null,
+      "spec_path": ".flow/specs/fn-1-interactive-guided-tasks-gui.md",
+      "status": "open",
+      "title": "Interactive Guided Tasks GUI",
+      "updated_at": "2026-02-03T03:31:03.768749Z"
+    },
+    "spec": "# Interactive Guided Tasks GUI\n\n## Overview\n\nAdd a \"Tasks\" navigator (5th nav item) to the Craft Agents Electron app that provides a full guided workflow for flow-next task management. Unlike a passive viewer, this GUI actively guides users through the flow-next lifecycle: idea \u2192 interview \u2192 plan \u2192 work \u2192 review \u2192 ship.\n\nThe GUI serves three personas: solo developers (fast task tracking), PMs/team leads (visual overview), and AI agents (status feedback).\n\n## Scope\n\n### In scope\n- Tasks nav item in LeftSidebar (Lucide `KanbanSquare` icon)\n- `TasksNavigationState` type + route integration\n- `.flow/` file watcher (FlowWatcher, follows ConfigWatcher pattern)\n- IPC layer for flowctl operations (`flow:*` channels)\n- Zod schemas for flow-next data validation\n- Tab-based multi-epic navigation with adaptive views (list/kanban/graph)\n- '+' button wizard with Quick/Standard/Complex templates\n- Kanban board with @dnd-kit drag-drop (pure status change)\n- Slide-over task detail panel (tabbed: Spec | Deps | Activity)\n- Read-only dependency graph (@xyflow/react + @dagrejs/dagre)\n- Split-view chat per epic (persistent, full codebase access)\n- Collapsible AI suggestion sidebar (contextual nudges)\n- Interactive onboarding tutorial (real data, driver.js or custom)\n- OS notifications (extend existing notification system)\n- Agent status badges on task cards\n- Guided error recovery (AI-analyzed flowctl failures)\n- Auto-prompt for epic review when all tasks complete\n- Empty state \u2192 onboarding flow when no `.flow/` exists\n\n### Out of scope (v1)\n- Inline spec editing (use CLI or text editor)\n- Bulk operations (multi-select, batch status)\n- WIP limits on kanban columns\n- Interactive dependency edge creation\n- Offline mode\n- Analytics/velocity tracking\n\n## Architecture\n\n### Key patterns to follow\n- **NavigationState union**: `shared/types.ts:L1128-1212` \u2014 add `TasksNavigationState` variant\n- **Route builders**: `shared/routes.ts` \u2014 add `routes.view.tasks()`, etc.\n- **Route parser**: `shared/route-parser.ts` \u2014 add tasks branch\n- **App shell nav**: `AppShell.tsx:~L2082-2095` \u2014 add Tasks LinkItem\n- **IPC 3-file pattern**: define in `shared/types.ts` IPC_CHANNELS, handle in `main/ipc.ts`, expose in `preload/index.ts`\n- **File watcher**: Follow `ConfigWatcher` at `main/lib/config-watcher.ts` with `fs.watch()` recursive + debounce\n- **Wizard**: Follow `OnboardingWizard.tsx` discriminated-union step pattern\n- **State**: Jotai atoms + `atomFamily` (per-epic state), `atomWithStorage` for persistence\n- **Notifications**: Extend `main/notifications.ts` `showNotification()`\n\n### Existing assets to reuse\n- `@dnd-kit/core` + `@dnd-kit/sortable` (already installed)\n- `react-resizable-panels` (already installed, wrapper at `components/ui/resizable.tsx`)\n- `react-markdown` + `remark-gfm` + `rehype-raw` (already installed, component at `packages/ui/src/components/markdown/Markdown.tsx`)\n- `motion` (already installed, used throughout app)\n- Radix UI: Tabs, Dialog, Collapsible, Tooltip (already installed)\n- dagre adapter: `packages/mermaid/src/dagre-adapter.ts`\n- Notification hooks: `renderer/hooks/useNotifications.ts`\n- UI primitives: `components/ui/` (tabs, dialog, badge, collapsible, scroll-area, sonner, command, context-menu)\n\n### New dependencies\n- `@dagrejs/dagre` \u2014 dependency graph layout\n- `@xyflow/react` \u2014 graph rendering\n- `driver.js` \u2014 onboarding tutorials (optional, may use custom)\n\n### Key technical decisions\n- **Chat storage**: IndexedDB via `idb` (avoids native rebuild complexity of better-sqlite3)\n- **Concurrent edits**: Last-write-wins with file watcher refresh (CLI changes auto-reflected)\n- **AI sidebar model**: Use main chat model (not Haiku) \u2014 sidebar suggestions are infrequent\n- **flowctl timeout**: 10s timeout on all execFile calls, with retry UI on timeout\n- **Write serialization**: Queue flowctl writes (max 1 concurrent), debounce rapid drags\n- **View persistence**: `atomWithStorage` per-epic keyed on epicId\n\n## Quick commands\n\n```bash\n# Dev server\nbun dev\n\n# Type check\nbun typecheck\n\n# Lint\nbun lint\n```\n\n## Acceptance\n\n- [ ] Tasks nav item visible in LeftSidebar, navigates to Tasks view\n- [ ] TasksNavigationState integrated into NavigationState union\n- [ ] FlowWatcher detects .flow/ changes and updates UI in <200ms\n- [ ] IPC channels for all flowctl CRUD operations\n- [ ] '+' button opens wizard with Quick/Standard/Complex selection\n- [ ] Kanban board with drag-drop status changes\n- [ ] Tab-based multi-epic with adaptive view selection\n- [ ] Slide-over task detail with Spec/Deps/Activity tabs\n- [ ] Read-only dependency graph with click-to-navigate\n- [ ] Split-view chat per epic with persistent history\n- [ ] Collapsible AI sidebar with contextual suggestions\n- [ ] Interactive onboarding for first-time users\n- [ ] OS notifications for task completions and reviews\n- [ ] Guided error recovery for flowctl failures\n- [ ] Agent status badges on active task cards\n\n## References\n\n- Existing plan: `plans/flow-next-tasks-gui.md` (architectural patterns, component specs)\n- Wireframes: `pencil-new.pen` (19 screens)\n- Navigation types: `apps/electron/src/shared/types.ts:L1128-1212`\n- App shell: `apps/electron/src/renderer/components/app-shell/AppShell.tsx`\n- Config watcher: `apps/electron/src/main/lib/config-watcher.ts`\n- Onboarding wizard: `apps/electron/src/renderer/components/onboarding/OnboardingWizard.tsx`\n- IPC handlers: `apps/electron/src/main/ipc.ts`\n- Notification system: `apps/electron/src/main/notifications.ts`\n"
+  },
+  "epic_id": "fn-1-interactive-guided-tasks-gui",
+  "schema_version": 2,
+  "tasks": [
+    {
+      "data": {
+        "assignee": null,
+        "claim_note": "",
+        "claimed_at": null,
+        "created_at": "2026-02-03T03:31:17.801680Z",
+        "depends_on": [],
+        "epic": "fn-1-interactive-guided-tasks-gui",
+        "id": "fn-1-interactive-guided-tasks-gui.1",
+        "priority": null,
+        "spec_path": ".flow/tasks/fn-1-interactive-guided-tasks-gui.1.md",
+        "status": "todo",
+        "title": "Navigation foundation: TasksNavigationState, routes, sidebar item",
+        "updated_at": "2026-02-03T03:31:39.955800Z"
+      },
+      "id": "fn-1-interactive-guided-tasks-gui.1",
+      "runtime": null,
+      "spec": "# fn-1-interactive-guided-tasks-gui.1 Navigation foundation: TasksNavigationState, routes, sidebar item\n\n## Description\nAdd `TasksNavigationState` to the app's navigation system, enabling the Tasks view as a first-class navigator alongside Chats, Sources, Settings, and Skills.\n\n**Size:** M\n**Files:**\n- `apps/electron/src/shared/types.ts` \u2014 add TasksNavigationState to NavigationState union, type guard, IPC channel stubs\n- `apps/electron/src/shared/routes.ts` \u2014 add routes.view.tasks(), routes.view.taskDetail(), routes.view.epicDetail(), routes.view.taskGraph()\n- `apps/electron/src/shared/route-parser.ts` \u2014 add tasks branch to parseRouteToNavigationState()\n- `apps/electron/src/renderer/components/app-shell/AppShell.tsx` \u2014 add Tasks LinkItem (~L2082-2095, after Skills)\n- `apps/electron/src/renderer/components/app-shell/MainContentPanel.tsx` \u2014 add isTasksNavigation() branch (render placeholder)\n\n## Approach\n\n- Follow `ChatsNavigationState` pattern at `shared/types.ts:L1128-1212`\n- `TasksNavigationState` interface: `{ navigator: 'tasks', filter?: { epicId?: string; status?: TaskStatus }, details?: { type: 'epic' | 'task' | 'graph'; epicId: string; taskId?: string } | null }`\n- Type guard: `isTasksNavigation(state): state is TasksNavigationState`\n- Route pattern: `/tasks`, `/tasks/:epicId`, `/tasks/:epicId/:taskId`, `/tasks/:epicId/graph`\n- Sidebar icon: Lucide `KanbanSquare`, placed between Skills and Settings separator\n- MainContentPanel: render a `<TasksPage />` placeholder component (actual content in later tasks)\n- Add `sidebar-types.ts` update for tasks mode if needed\n\n## Key context\n\n- NavigationContext at `renderer/contexts/NavigationContext.tsx` manages history stack + route restoration. New routes auto-integrate via parseRouteToNavigationState.\n- AppShell.tsx is ~2300 lines. The LinkItem array is around L2082-2095.\n## Acceptance\n- [ ] `TasksNavigationState` type added to `NavigationState` union\n- [ ] `isTasksNavigation()` type guard exported\n- [ ] Route builders: `routes.view.tasks()`, `routes.view.epicDetail(epicId)`, `routes.view.taskDetail(epicId, taskId)`, `routes.view.taskGraph(epicId)`\n- [ ] Route parser handles all task routes correctly\n- [ ] \"Tasks\" nav item visible in LeftSidebar with KanbanSquare icon\n- [ ] Clicking Tasks nav item navigates to tasks view\n- [ ] MainContentPanel renders TasksPage placeholder when tasks navigation active\n- [ ] TypeScript compiles without errors\n## Done summary\nTBD\n\n## Evidence\n- Commits:\n- Tests:\n- PRs:\n"
+    },
+    {
+      "data": {
+        "assignee": null,
+        "claim_note": "",
+        "claimed_at": null,
+        "created_at": "2026-02-03T03:31:18.937090Z",
+        "depends_on": [
+          "fn-1-interactive-guided-tasks-gui.6"
+        ],
+        "epic": "fn-1-interactive-guided-tasks-gui",
+        "id": "fn-1-interactive-guided-tasks-gui.10",
+        "priority": null,
+        "spec_path": ".flow/tasks/fn-1-interactive-guided-tasks-gui.10.md",
+        "status": "todo",
+        "title": "Split-view epic chat: persistent history, write-with-confirmation",
+        "updated_at": "2026-02-03T03:34:07.157127Z"
+      },
+      "id": "fn-1-interactive-guided-tasks-gui.10",
+      "runtime": null,
+      "spec": "# fn-1-interactive-guided-tasks-gui.10 Split-view epic chat: persistent history, write-with-confirmation\n\n## Description\nBuild the split-view chat panel scoped to an epic. Persistent chat history (IndexedDB), full codebase access, write-with-confirmation for task mutations, slash commands + action buttons.\n\n**Size:** L \u2192 split consideration, but kept as single task due to deep integration with existing chat system\n\n**Files:**\n- `apps/electron/src/renderer/components/tasks/EpicChatPanel.tsx` \u2014 split-view chat container\n- `apps/electron/src/renderer/components/tasks/EpicChatHistory.tsx` \u2014 IndexedDB persistence layer\n- `apps/electron/src/renderer/components/tasks/ChatActionButtons.tsx` \u2014 /plan, /interview, /review buttons\n- `apps/electron/src/renderer/components/tasks/WriteConfirmation.tsx` \u2014 confirmation dialog for mutations\n\n## Approach\n\n- Split-view: use existing `react-resizable-panels` (wrapper at `components/ui/resizable.tsx`) with `autoSaveId=\"epic-chat\"`\n- Chat panel appears to the right of the kanban/list/graph view within a tab\n- Chat history: IndexedDB via `idb` library, keyed on epicId. Store messages with role, content, timestamp.\n- Write-with-confirmation: when AI proposes a task mutation (status change, spec edit, new task), show a preview card with \"Apply\" / \"Dismiss\" buttons. On Apply, execute via IPC.\n- Slash commands: parse input for `/plan`, `/interview`, `/review` \u2014 trigger corresponding flow-next operations\n- Action buttons: row of buttons at bottom of chat (Plan, Interview, Review) that insert the slash command\n- Chat connects to existing AI infrastructure (same as main chat panel)\n- Auto-save chat draft on tab switch (Jotai atom per epic)\n\n## Key context\n\n- The existing chat system at `renderer/pages/ChatPage.tsx` handles AI interaction. The epic chat should reuse as much of this infrastructure as possible.\n- `react-resizable-panels` `autoSaveId` persists panel sizes to localStorage automatically\n- IndexedDB via `idb` avoids native rebuild complexity of better-sqlite3\n- Install `idb` as new dependency\n## Acceptance\n- [ ] Split-view chat panel opens alongside epic content\n- [ ] Chat history persists per epic in IndexedDB\n- [ ] Messages survive app restart (reload from IndexedDB)\n- [ ] Slash commands /plan, /interview, /review trigger flow-next operations\n- [ ] Action buttons insert corresponding slash commands\n- [ ] Write-with-confirmation: AI task mutations show preview with Apply/Dismiss\n- [ ] Applied mutations execute via IPC and update kanban immediately\n- [ ] Chat draft auto-saved on tab switch\n- [ ] Panel resizable with persisted width\n- [ ] `idb` dependency installed\n## Done summary\nTBD\n\n## Evidence\n- Commits:\n- Tests:\n- PRs:\n"
+    },
+    {
+      "data": {
+        "assignee": null,
+        "claim_note": "",
+        "claimed_at": null,
+        "created_at": "2026-02-03T03:31:19.061749Z",
+        "depends_on": [
+          "fn-1-interactive-guided-tasks-gui.10"
+        ],
+        "epic": "fn-1-interactive-guided-tasks-gui",
+        "id": "fn-1-interactive-guided-tasks-gui.11",
+        "priority": null,
+        "spec_path": ".flow/tasks/fn-1-interactive-guided-tasks-gui.11.md",
+        "status": "todo",
+        "title": "Collapsible AI suggestion sidebar with contextual nudges",
+        "updated_at": "2026-02-03T03:34:07.286472Z"
+      },
+      "id": "fn-1-interactive-guided-tasks-gui.11",
+      "runtime": null,
+      "spec": "# fn-1-interactive-guided-tasks-gui.11 Collapsible AI suggestion sidebar with contextual nudges\n\n## Description\nBuild the collapsible AI suggestion sidebar that analyzes current epic/task state and recommends actions. Appears as a right panel that can be toggled open/closed.\n\n**Size:** M\n**Files:**\n- `apps/electron/src/renderer/components/tasks/AISuggestionSidebar.tsx` \u2014 collapsible sidebar container\n- `apps/electron/src/renderer/components/tasks/SuggestionCard.tsx` \u2014 individual suggestion with action button\n- `apps/electron/src/renderer/atoms/tasks-state.ts` \u2014 add suggestion sidebar state atoms\n\n## Approach\n\n- Collapsible panel on right side of tasks view, toggle via button in toolbar\n- State: `sidebarOpenAtom` persisted with `atomWithStorage`, defaults to collapsed\n- Suggestions generated from epic state analysis (client-side rules, not AI model):\n  - Epic has no tasks \u2192 \"Run /plan to create tasks\"\n  - Task stuck in_progress >24h \u2192 \"Check on this task\"\n  - All tasks done \u2192 \"Run epic review\"\n  - Epic has no dependencies \u2192 \"Add dependencies if needed\"\n  - Tasks have no specs \u2192 \"Interview to add detail\"\n- Max 3 suggestions shown at a time, prioritized by urgency\n- Each suggestion: icon, title, description, action button (executes the suggestion)\n- Dismiss individual suggestions (remembered per epic in Jotai atom)\n- Animate with Motion `AnimatePresence` for enter/exit\n\n## Key context\n\n- Suggestions are rule-based, not LLM-powered (keeps it fast and free)\n- Collapsible sidebar pattern: use Motion for slide animation, Radix Collapsible for state\n- Don't show suggestions on truly empty state (no .flow/) \u2014 that's the onboarding flow\n## Acceptance\n- [ ] Sidebar toggles open/closed via toolbar button\n- [ ] Sidebar state persists across sessions\n- [ ] Rule-based suggestions generated from epic/task state\n- [ ] Max 3 suggestions shown, prioritized by urgency\n- [ ] Each suggestion has icon, title, description, action button\n- [ ] Clicking action button executes the suggestion\n- [ ] Individual suggestions dismissable (remembered per epic)\n- [ ] Sidebar animates in/out smoothly\n- [ ] No suggestions shown when .flow/ doesn't exist\n## Done summary\nTBD\n\n## Evidence\n- Commits:\n- Tests:\n- PRs:\n"
+    },
+    {
+      "data": {
+        "assignee": null,
+        "claim_note": "",
+        "claimed_at": null,
+        "created_at": "2026-02-03T03:31:19.188021Z",
+        "depends_on": [
+          "fn-1-interactive-guided-tasks-gui.9"
+        ],
+        "epic": "fn-1-interactive-guided-tasks-gui",
+        "id": "fn-1-interactive-guided-tasks-gui.12",
+        "priority": null,
+        "spec_path": ".flow/tasks/fn-1-interactive-guided-tasks-gui.12.md",
+        "status": "todo",
+        "title": "Onboarding tutorial, guided error recovery, OS notifications",
+        "updated_at": "2026-02-03T03:34:07.415631Z"
+      },
+      "id": "fn-1-interactive-guided-tasks-gui.12",
+      "runtime": null,
+      "spec": "# fn-1-interactive-guided-tasks-gui.12 Onboarding tutorial, guided error recovery, OS notifications\n\n## Description\nBuild the interactive onboarding tutorial for first-time users, guided error recovery for flowctl failures, and OS notification integration for task events.\n\n**Size:** M\n**Files:**\n- `apps/electron/src/renderer/components/tasks/OnboardingTutorial.tsx` \u2014 step-by-step tutorial with tooltips\n- `apps/electron/src/renderer/components/tasks/ErrorRecoveryPanel.tsx` \u2014 guided error recovery UI\n- `apps/electron/src/main/lib/flow-notifications.ts` \u2014 notification integration for flow events\n- `apps/electron/src/renderer/hooks/useFlowNotifications.ts` \u2014 renderer-side notification hook\n\n## Approach\n\n### Onboarding\n- Triggered after .flow/ initialized (from empty state CTA)\n- Steps: (1) \"This is your epic list\" \u2192 highlight navigator, (2) \"Create your first epic\" \u2192 highlight '+' button, (3) \"Your tasks appear here\" \u2192 highlight kanban area, (4) \"Done! Start building.\"\n- Use spotlight overlay pattern (dim everything except highlighted element)\n- Tutorial walks through creating a real epic (user's first one)\n- Completion persisted to localStorage, skippable via \"Skip Tutorial\" link\n\n### Error Recovery\n- When FlowBridge returns typed errors, ErrorRecoveryPanel renders contextual recovery:\n  - `FlowctlNotFound` \u2192 \"Install flowctl\" button + path explanation\n  - `InvalidOutput` \u2192 \"Corrupt data detected\" + \"View raw JSON\" + \"Revert from backup\"\n  - `CommandFailed` \u2192 show error message + \"Retry\" + \"Report Issue\"\n- Panel replaces normal content in the error area (not a modal)\n\n### OS Notifications\n- Extend existing `main/notifications.ts` with flow-specific notifications\n- Events: task completed (by agent), epic review ready, flowctl error\n- Only notify when window is not focused (check `BrowserWindow.isFocused()`)\n- Use `silent: true` for low-priority, sound for errors\n\n## Key context\n\n- Existing notification system at `main/notifications.ts` has `showNotification()` and badge support\n- `useNotifications` hook at `renderer/hooks/useNotifications.ts` tracks window focus\n- Error recovery follows circuit-breaker pattern: after 3 consecutive failures, stop auto-retry\n- Tutorial should be lightweight \u2014 no heavy library needed, custom overlay + Motion animations\n## Acceptance\n- [ ] Onboarding tutorial triggers after first .flow/ initialization\n- [ ] Tutorial highlights UI elements with spotlight overlay\n- [ ] Tutorial is skippable and completion is persisted\n- [ ] Tutorial walks through creating a real epic\n- [ ] FlowctlNotFound error shows install guidance\n- [ ] InvalidOutput error shows raw JSON view and revert option\n- [ ] CommandFailed error shows retry and report options\n- [ ] Circuit-breaker: stops auto-retry after 3 consecutive failures\n- [ ] OS notifications fire for task completion, review ready, errors\n- [ ] Notifications only fire when window is not focused\n- [ ] Notification click navigates to relevant task/epic\n## Done summary\nTBD\n\n## Evidence\n- Commits:\n- Tests:\n- PRs:\n"
+    },
+    {
+      "data": {
+        "assignee": null,
+        "claim_note": "",
+        "claimed_at": null,
+        "created_at": "2026-02-03T03:31:17.926330Z",
+        "depends_on": [],
+        "epic": "fn-1-interactive-guided-tasks-gui",
+        "id": "fn-1-interactive-guided-tasks-gui.2",
+        "priority": null,
+        "spec_path": ".flow/tasks/fn-1-interactive-guided-tasks-gui.2.md",
+        "status": "todo",
+        "title": "Data layer: Zod schemas, IPC channels, flowctl bridge",
+        "updated_at": "2026-02-03T03:31:54.780107Z"
+      },
+      "id": "fn-1-interactive-guided-tasks-gui.2",
+      "runtime": null,
+      "spec": "# fn-1-interactive-guided-tasks-gui.2 Data layer: Zod schemas, IPC channels, flowctl bridge\n\n## Description\nBuild the data access layer: Zod schemas for flow-next types, IPC channel definitions, and a main-process bridge that shells out to flowctl with JSON output.\n\n**Size:** M\n**Files:**\n- `apps/electron/src/shared/flow-schemas.ts` \u2014 Zod schemas for Epic, Task, TaskStatus, EpicStatus\n- `apps/electron/src/shared/types.ts` \u2014 add flow:* IPC_CHANNELS entries\n- `apps/electron/src/main/lib/flow-bridge.ts` \u2014 execFile wrapper for flowctl with --json, 10s timeout, write queue\n- `apps/electron/src/main/ipc.ts` \u2014 register flow:* IPC handlers\n- `apps/electron/src/preload/index.ts` \u2014 expose flow API via contextBridge\n\n## Approach\n\n- Zod schemas: `TaskStatusSchema = z.enum(['todo', 'in_progress', 'blocked', 'done'])`, `EpicStatusSchema = z.enum(['open', 'done'])`, `TaskSchema`, `EpicSchema` with all fields from flowctl JSON output\n- IPC channels: `flow:epics-list`, `flow:tasks-list`, `flow:task-update-status`, `flow:epic-create`, `flow:task-create`, `flow:epic-show`, `flow:task-show`\n- FlowBridge class: resolves flowctl binary path, wraps `execFile` with `--json` flag, 10s timeout, serialized write queue (max 1 concurrent write), parses + validates output with Zod\n- Error handling: distinguish \"flowctl not found\", \"invalid JSON output\", \"command failed\" \u2014 each returns typed error for GUI recovery\n\n## Key context\n\n- flowctl binary path: check `.flow/bin/flowctl` first (local install), then global PATH\n- IPC pattern: `ipcMain.handle(channel, handler)` in `main/ipc.ts`, `ipcRenderer.invoke(channel)` in preload\n- All flowctl commands support `--json` output flag\n- Write serialization prevents file lock contention when user drags cards rapidly\n## Acceptance\n- [ ] Zod schemas validate real flowctl --json output for epics and tasks\n- [ ] IPC channels defined in IPC_CHANNELS object\n- [ ] FlowBridge resolves flowctl binary (local .flow/bin/ then PATH)\n- [ ] FlowBridge execFile has 10s timeout\n- [ ] FlowBridge serializes writes (queue, max 1 concurrent)\n- [ ] IPC handlers registered for all flow:* channels\n- [ ] Preload exposes flow API to renderer\n- [ ] Typed error variants: FlowctlNotFound, InvalidOutput, CommandFailed\n- [ ] TypeScript compiles without errors\n## Done summary\nTBD\n\n## Evidence\n- Commits:\n- Tests:\n- PRs:\n"
+    },
+    {
+      "data": {
+        "assignee": null,
+        "claim_note": "",
+        "claimed_at": null,
+        "created_at": "2026-02-03T03:31:18.051173Z",
+        "depends_on": [
+          "fn-1-interactive-guided-tasks-gui.2"
+        ],
+        "epic": "fn-1-interactive-guided-tasks-gui",
+        "id": "fn-1-interactive-guided-tasks-gui.3",
+        "priority": null,
+        "spec_path": ".flow/tasks/fn-1-interactive-guided-tasks-gui.3.md",
+        "status": "todo",
+        "title": "FlowWatcher: .flow/ directory watcher with IPC events",
+        "updated_at": "2026-02-03T03:32:05.711141Z"
+      },
+      "id": "fn-1-interactive-guided-tasks-gui.3",
+      "runtime": null,
+      "spec": "# fn-1-interactive-guided-tasks-gui.3 FlowWatcher: .flow/ directory watcher with IPC events\n\n## Description\nImplement FlowWatcher class that monitors `.flow/` directory for changes and emits IPC events to renderer, enabling live sync between CLI and GUI.\n\n**Size:** M\n**Files:**\n- `apps/electron/src/main/lib/flow-watcher.ts` \u2014 FlowWatcher class\n- `apps/electron/src/main/ipc.ts` \u2014 integrate FlowWatcher lifecycle (start/stop per workspace)\n- `apps/electron/src/shared/types.ts` \u2014 add `flow:changed` IPC event channel\n\n## Approach\n\n- Follow `ConfigWatcher` pattern at `main/lib/config-watcher.ts`\n- Use `fs.watch()` with `recursive: true` on `.flow/` directory (macOS/Windows supported)\n- Debounce per file key: 100ms stabilization before emitting\n- Emit `flow:changed` IPC event with payload: `{ type: 'epic' | 'task' | 'config', id?: string }`\n- Parse changed filename to determine type (e.g., `epics/fn-1.json` \u2192 epic, `tasks/fn-1.1.json` \u2192 task)\n- Lifecycle: create watcher when workspace opens, destroy on workspace close\n- Handle `.flow/` not existing: watch parent dir for creation, then switch to watching `.flow/`\n\n## Key context\n\n- `fs.watch` with `recursive: true` works on macOS (FSEvents) and Windows. Linux requires chokidar \u2014 defer Linux support.\n- ConfigWatcher creates/destroys per workspace. FlowWatcher should follow same lifecycle.\n- Renderer subscribes via `ipcRenderer.on('flow:changed', callback)` in preload\n## Acceptance\n- [ ] FlowWatcher class monitors .flow/ directory recursively\n- [ ] Changes debounced at 100ms per file\n- [ ] IPC event `flow:changed` emitted with typed payload\n- [ ] Watcher starts/stops with workspace lifecycle\n- [ ] Handles .flow/ not existing (watches for creation)\n- [ ] Handles .flow/ being deleted while watching (graceful cleanup)\n- [ ] Renderer can subscribe to flow:changed events via preload API\n## Done summary\nTBD\n\n## Evidence\n- Commits:\n- Tests:\n- PRs:\n"
+    },
+    {
+      "data": {
+        "assignee": null,
+        "claim_note": "",
+        "claimed_at": null,
+        "created_at": "2026-02-03T03:31:18.175772Z",
+        "depends_on": [
+          "fn-1-interactive-guided-tasks-gui.1",
+          "fn-1-interactive-guided-tasks-gui.2"
+        ],
+        "epic": "fn-1-interactive-guided-tasks-gui",
+        "id": "fn-1-interactive-guided-tasks-gui.4",
+        "priority": null,
+        "spec_path": ".flow/tasks/fn-1-interactive-guided-tasks-gui.4.md",
+        "status": "todo",
+        "title": "Tasks navigator panel: epic list, progress indicators, empty state",
+        "updated_at": "2026-02-03T03:32:47.800204Z"
+      },
+      "id": "fn-1-interactive-guided-tasks-gui.4",
+      "runtime": null,
+      "spec": "# fn-1-interactive-guided-tasks-gui.4 Tasks navigator panel: epic list, progress indicators, empty state\n\n## Description\nBuild the Tasks navigator panel (left panel when Tasks nav is active): epic list with progress indicators, filtering, and empty state for no .flow/ directory.\n\n**Size:** M\n**Files:**\n- `apps/electron/src/renderer/components/tasks/TasksNavigatorPanel.tsx` \u2014 main navigator panel\n- `apps/electron/src/renderer/components/tasks/EpicListItem.tsx` \u2014 epic row with progress bar\n- `apps/electron/src/renderer/components/tasks/TasksEmptyState.tsx` \u2014 empty state with init CTA\n- `apps/electron/src/renderer/atoms/tasks-state.ts` \u2014 Jotai atoms for epics, tasks, loading state\n- `apps/electron/src/renderer/pages/TasksPage.tsx` \u2014 replace placeholder from task 1\n\n## Approach\n\n- Navigator panel follows `NavigatorPanel.tsx` pattern: `Panel variant=\"shrink\"` + `PanelHeader`\n- Fetch epics via IPC `flow:epics-list` on mount, subscribe to `flow:changed` for live updates\n- Each epic row: title, status badge, progress bar (done/total tasks), click to select\n- Empty state: illustration + \"Initialize Flow-Next\" button \u2192 calls `flow:init` IPC\n- Jotai atoms: `epicsAtom` (derived from IPC), `tasksAtomFamily(epicId)`, `selectedEpicAtom`\n- Use `atomWithStorage` for `selectedEpicAtom` to persist across sessions\n\n## Key context\n\n- NavigatorPanel is a simple wrapper. The real content is children.\n- AppShell.tsx conditionally renders navigator content based on `navState.navigator`\n- The '+' button (epic creation) is Task 9 \u2014 for now, just show the list + empty state\n## Acceptance\n- [ ] TasksNavigatorPanel renders when Tasks nav is active\n- [ ] Epic list shows all epics with title and progress indicators\n- [ ] Clicking an epic selects it and updates navigation state\n- [ ] Empty state renders when no .flow/ directory exists\n- [ ] \"Initialize\" button in empty state creates .flow/ via IPC\n- [ ] Live updates when flow:changed event received\n- [ ] Selected epic persists across sessions via atomWithStorage\n- [ ] Loading state shown while fetching epics\n## Done summary\nTBD\n\n## Evidence\n- Commits:\n- Tests:\n- PRs:\n"
+    },
+    {
+      "data": {
+        "assignee": null,
+        "claim_note": "",
+        "claimed_at": null,
+        "created_at": "2026-02-03T03:31:18.299588Z",
+        "depends_on": [
+          "fn-1-interactive-guided-tasks-gui.4"
+        ],
+        "epic": "fn-1-interactive-guided-tasks-gui",
+        "id": "fn-1-interactive-guided-tasks-gui.5",
+        "priority": null,
+        "spec_path": ".flow/tasks/fn-1-interactive-guided-tasks-gui.5.md",
+        "status": "todo",
+        "title": "Kanban board: columns, task cards, drag-drop status changes",
+        "updated_at": "2026-02-03T03:32:47.924801Z"
+      },
+      "id": "fn-1-interactive-guided-tasks-gui.5",
+      "runtime": null,
+      "spec": "# fn-1-interactive-guided-tasks-gui.5 Kanban board: columns, task cards, drag-drop status changes\n\n## Description\nBuild the kanban board view as the main content area when an epic is selected. Four columns (todo, in_progress, blocked, done) with task cards and drag-drop for pure status changes.\n\n**Size:** M\n**Files:**\n- `apps/electron/src/renderer/components/tasks/KanbanBoard.tsx` \u2014 board layout with 4 columns\n- `apps/electron/src/renderer/components/tasks/KanbanColumn.tsx` \u2014 droppable column\n- `apps/electron/src/renderer/components/tasks/TaskCard.tsx` \u2014 draggable task card\n- `apps/electron/src/renderer/components/tasks/KanbanDragOverlay.tsx` \u2014 drag preview\n\n## Approach\n\n- Use `@dnd-kit/core` with `useDroppable` on columns, `useDraggable` on cards (NOT `@dnd-kit/sortable` \u2014 no intra-column reordering needed)\n- `DragOverlay` renders card preview during drag\n- `PointerSensor` with `activationConstraint: { distance: 8 }` to prevent accidental drags\n- `KeyboardSensor` for accessibility\n- `onDragEnd`: extract target column status, call `flow:task-update-status` IPC, optimistic update with rollback on failure\n- Task card shows: title, status badge, size indicator, assignee (if claimed), agent badge (if active)\n- Drag within same column = no-op\n- Blocked column: tasks with unresolved dependencies shown with lock icon\n\n## Key context\n\n- Practice scout confirmed: use `useDroppable`/`useDraggable` (not sortable) for pure status change kanban\n- `@dnd-kit/core` v6.3.1 and `@dnd-kit/sortable` v10.0.0 already installed\n- Optimistic update: immediately move card, revert if IPC call fails (with toast error)\n## Acceptance\n- [ ] Kanban board renders 4 columns: todo, in_progress, blocked, done\n- [ ] Task cards display title, status badge, size, assignee\n- [ ] Drag-drop moves card between columns (status change via IPC)\n- [ ] Drag within same column is no-op\n- [ ] DragOverlay shows card preview during drag\n- [ ] Optimistic update with rollback on failure\n- [ ] Keyboard sensor enables accessible drag-drop\n- [ ] Agent status badge shown on cards with active agents\n- [ ] Empty column shows placeholder text\n## Done summary\nTBD\n\n## Evidence\n- Commits:\n- Tests:\n- PRs:\n"
+    },
+    {
+      "data": {
+        "assignee": null,
+        "claim_note": "",
+        "claimed_at": null,
+        "created_at": "2026-02-03T03:31:18.424831Z",
+        "depends_on": [
+          "fn-1-interactive-guided-tasks-gui.5"
+        ],
+        "epic": "fn-1-interactive-guided-tasks-gui",
+        "id": "fn-1-interactive-guided-tasks-gui.6",
+        "priority": null,
+        "spec_path": ".flow/tasks/fn-1-interactive-guided-tasks-gui.6.md",
+        "status": "todo",
+        "title": "Tab-based multi-epic navigation with adaptive view selection",
+        "updated_at": "2026-02-03T03:32:48.053363Z"
+      },
+      "id": "fn-1-interactive-guided-tasks-gui.6",
+      "runtime": null,
+      "spec": "# fn-1-interactive-guided-tasks-gui.6 Tab-based multi-epic navigation with adaptive view selection\n\n## Description\nAdd tab-based multi-epic navigation and adaptive view selection. Each open epic gets a tab; tab content auto-selects the best view (list/kanban/graph) based on epic state.\n\n**Size:** M\n**Files:**\n- `apps/electron/src/renderer/components/tasks/EpicTabBar.tsx` \u2014 tab bar with epic tabs + add button\n- `apps/electron/src/renderer/components/tasks/TasksMainContent.tsx` \u2014 routes to correct view per tab\n- `apps/electron/src/renderer/components/tasks/ListView.tsx` \u2014 simple list view for few tasks\n- `apps/electron/src/renderer/atoms/tasks-state.ts` \u2014 add openTabs, activeTab, viewModePerEpic atoms\n\n## Approach\n\n- Tabs at top of main content area (not Radix Tabs \u2014 custom tab bar for closeable tabs with overflow)\n- Tab state: `openTabsAtom` (ordered array of epicIds), `activeTabAtom` (current epicId)\n- View selection logic: `<5 tasks \u2192 list`, `>=5 tasks \u2192 kanban`, `any deps \u2192 graph available in toggle`\n- User override: `viewModePerEpicFamily(epicId)` atom persisted with `atomWithStorage`\n- View toggle: small segmented control [List] [Kanban] [Graph] below tab bar\n- Tab overflow: horizontal scroll with arrow buttons when >8 tabs\n- Close tab: X button on tab, middle-click\n- Opening an epic from navigator: adds tab if not open, switches to it if already open\n\n## Key context\n\n- The kanban board (task 5) becomes one view option within a tab\n- The dependency graph (task 8) becomes another view option\n- ListView is a simple table: task title, status, size, assignee \u2014 minimal effort\n- Keep heavy views mounted with `display: none` when inactive (preserve scroll/zoom state)\n## Acceptance\n- [ ] Tab bar shows one tab per open epic with close button\n- [ ] Switching tabs changes active epic view\n- [ ] Opening epic from navigator adds/activates tab\n- [ ] Auto-selects best view: list (<5 tasks), kanban (>=5), graph toggle available\n- [ ] User can override view with segmented control\n- [ ] View preference persisted per epic across sessions\n- [ ] Tab overflow: horizontal scroll with arrow buttons\n- [ ] Middle-click closes tab\n- [ ] Inactive views stay mounted (display: none) to preserve state\n## Done summary\nTBD\n\n## Evidence\n- Commits:\n- Tests:\n- PRs:\n"
+    },
+    {
+      "data": {
+        "assignee": null,
+        "claim_note": "",
+        "claimed_at": null,
+        "created_at": "2026-02-03T03:31:18.556462Z",
+        "depends_on": [
+          "fn-1-interactive-guided-tasks-gui.5"
+        ],
+        "epic": "fn-1-interactive-guided-tasks-gui",
+        "id": "fn-1-interactive-guided-tasks-gui.7",
+        "priority": null,
+        "spec_path": ".flow/tasks/fn-1-interactive-guided-tasks-gui.7.md",
+        "status": "todo",
+        "title": "Slide-over task detail panel: Spec, Deps, Activity tabs",
+        "updated_at": "2026-02-03T03:33:23.721613Z"
+      },
+      "id": "fn-1-interactive-guided-tasks-gui.7",
+      "runtime": null,
+      "spec": "# fn-1-interactive-guided-tasks-gui.7 Slide-over task detail panel: Spec, Deps, Activity tabs\n\n## Description\nBuild the slide-over task detail panel that opens when clicking a task card. Tabbed content: Spec (markdown), Deps (blocking/blocked-by), Activity (status history).\n\n**Size:** M\n**Files:**\n- `apps/electron/src/renderer/components/tasks/TaskDetailSlideOver.tsx` \u2014 slide-over container with animation\n- `apps/electron/src/renderer/components/tasks/TaskSpecTab.tsx` \u2014 markdown spec rendering\n- `apps/electron/src/renderer/components/tasks/TaskDepsTab.tsx` \u2014 dependency list with links\n- `apps/electron/src/renderer/components/tasks/TaskActivityTab.tsx` \u2014 status change history\n\n## Approach\n\n- Slide-over: Radix Dialog + Motion `initial={{ x: '100%' }} animate={{ x: 0 }}` with spring transition\n- Width: 400px, right-aligned, overlay dims kanban behind\n- Tabs: Radix Tabs inside the panel. Tab bar stays sticky at top.\n- Spec tab: reuse existing `<Markdown>` component from `packages/ui/src/components/markdown/Markdown.tsx`\n- Deps tab: list of blocking tasks and blocked-by tasks, each clickable to navigate to that task\n- Activity tab: status transitions with timestamps (read from task JSON history if available)\n- Header: task title, status badge, close button, action buttons (Start, Complete, etc.)\n\n## Key context\n\n- Practice scout: use Radix Dialog (not Vaul drawer) for right-side slide-over\n- Motion `AnimatePresence` required for exit animation\n- Each tab panel should scroll independently, tab bar fixed\n- Markdown component already handles remark-gfm + rehype-raw\n## Acceptance\n- [ ] Clicking task card opens slide-over panel from right\n- [ ] Panel animates in/out with spring transition\n- [ ] Spec tab renders task spec as markdown\n- [ ] Deps tab lists blocking and blocked-by tasks with clickable links\n- [ ] Activity tab shows status change history with timestamps\n- [ ] Tab bar stays sticky at top while content scrolls\n- [ ] Header shows task title, status badge, close button\n- [ ] Action buttons (Start, Complete) update task status via IPC\n- [ ] Escape key closes panel\n## Done summary\nTBD\n\n## Evidence\n- Commits:\n- Tests:\n- PRs:\n"
+    },
+    {
+      "data": {
+        "assignee": null,
+        "claim_note": "",
+        "claimed_at": null,
+        "created_at": "2026-02-03T03:31:18.685023Z",
+        "depends_on": [
+          "fn-1-interactive-guided-tasks-gui.4"
+        ],
+        "epic": "fn-1-interactive-guided-tasks-gui",
+        "id": "fn-1-interactive-guided-tasks-gui.8",
+        "priority": null,
+        "spec_path": ".flow/tasks/fn-1-interactive-guided-tasks-gui.8.md",
+        "status": "todo",
+        "title": "Read-only dependency graph: dagre layout, click-to-navigate",
+        "updated_at": "2026-02-03T03:33:23.845888Z"
+      },
+      "id": "fn-1-interactive-guided-tasks-gui.8",
+      "runtime": null,
+      "spec": "# fn-1-interactive-guided-tasks-gui.8 Read-only dependency graph: dagre layout, click-to-navigate\n\n## Description\nBuild the read-only dependency graph visualization using @xyflow/react and @dagrejs/dagre. Click nodes to navigate to tasks.\n\n**Size:** M\n**Files:**\n- `apps/electron/src/renderer/components/tasks/DependencyGraph.tsx` \u2014 React Flow canvas with dagre layout\n- `apps/electron/src/renderer/components/tasks/TaskNode.tsx` \u2014 custom node component for graph\n\n## Approach\n\n- Install `@xyflow/react` and `@dagrejs/dagre` as new dependencies\n- Build nodes from tasks array, edges from `depends_on` arrays\n- Run dagre layout with `rankdir: 'TB'`, `nodesep: 50`, `ranksep: 50`\n- Layout after nodes are measured: use `useNodesInitialized()` hook, then apply dagre positions\n- Custom TaskNode: shows task title, status color-coded border, size badge\n- Read-only: `nodesDraggable={false}`, `nodesConnectable={false}`, `elementsSelectable={false}`\n- Keep `panOnDrag` and `zoomOnScroll` enabled\n- `onNodeClick`: navigate to task (update TasksNavigationState details)\n- `fitView` after layout completes\n- Can reuse dagre utilities from `packages/mermaid/src/dagre-adapter.ts` (centerToTopLeft, snapToOrthogonal)\n\n## Key context\n\n- React Flow v12+ was rebranded as @xyflow/react \u2014 import from `@xyflow/react`\n- Common bug: hardcoding node dimensions breaks with variable content. Must measure first.\n- This view is one of the adaptive view options in the tab content (task 6)\n## Acceptance\n- [ ] @xyflow/react and @dagrejs/dagre installed\n- [ ] Graph renders all tasks as nodes with dependency edges\n- [ ] Dagre auto-layout positions nodes (top-to-bottom)\n- [ ] Custom TaskNode shows title, status color, size badge\n- [ ] Graph is read-only (no drag nodes, no connect edges)\n- [ ] Pan and zoom enabled\n- [ ] Click node navigates to task detail\n- [ ] fitView auto-zooms to show all nodes\n- [ ] Empty state when epic has no dependencies\n## Done summary\nTBD\n\n## Evidence\n- Commits:\n- Tests:\n- PRs:\n"
+    },
+    {
+      "data": {
+        "assignee": null,
+        "claim_note": "",
+        "claimed_at": null,
+        "created_at": "2026-02-03T03:31:18.812291Z",
+        "depends_on": [
+          "fn-1-interactive-guided-tasks-gui.4"
+        ],
+        "epic": "fn-1-interactive-guided-tasks-gui",
+        "id": "fn-1-interactive-guided-tasks-gui.9",
+        "priority": null,
+        "spec_path": ".flow/tasks/fn-1-interactive-guided-tasks-gui.9.md",
+        "status": "todo",
+        "title": "Epic creation wizard: Quick, Standard, Complex templates",
+        "updated_at": "2026-02-03T03:33:23.970902Z"
+      },
+      "id": "fn-1-interactive-guided-tasks-gui.9",
+      "runtime": null,
+      "spec": "# fn-1-interactive-guided-tasks-gui.9 Epic creation wizard: Quick, Standard, Complex templates\n\n## Description\nBuild the epic creation wizard triggered by the '+' button. Three complexity tiers: Quick (one-liner \u2192 auto-plan), Standard (5-10 question light interview), Complex (creates shell \u2192 opens chat).\n\n**Size:** M\n**Files:**\n- `apps/electron/src/renderer/components/tasks/EpicCreationWizard.tsx` \u2014 wizard dialog with step management\n- `apps/electron/src/renderer/components/tasks/QuickEpicStep.tsx` \u2014 one-liner input\n- `apps/electron/src/renderer/components/tasks/StandardInterviewStep.tsx` \u2014 multi-question form\n- `apps/electron/src/renderer/components/tasks/ComplexEpicStep.tsx` \u2014 shell creation + chat handoff\n\n## Approach\n\n- Follow `OnboardingWizard.tsx` pattern: discriminated union step types, parent manages state\n- Step 1: Template picker \u2014 three cards: Quick / Standard / Complex with descriptions\n- Quick flow: text input \u2192 calls `flow:epic-create` IPC \u2192 auto-navigate to new epic tab\n- Standard flow: 5-10 structured questions (title, description, acceptance criteria, tech notes, risk level) \u2192 creates epic + tasks via IPC\n- Complex flow: title + description \u2192 creates epic shell \u2192 opens split-view chat for deep interview (task 10)\n- Wizard opens as Radix Dialog (modal)\n- '+' button positioned in navigator panel header and tab bar\n\n## Key context\n\n- OnboardingWizard at `components/onboarding/OnboardingWizard.tsx` is the pattern reference\n- Quick template should be fast: single text input, no modal steps after submission\n- Standard template questions should be derived from flow-next interview methodology\n- Complex template just creates the epic and hands off to the chat \u2014 no interview in the wizard itself\n## Acceptance\n- [ ] '+' button in navigator panel and tab bar opens wizard\n- [ ] Template picker shows Quick / Standard / Complex cards\n- [ ] Quick: one-liner input \u2192 epic created \u2192 navigates to new epic\n- [ ] Standard: 5-10 question form \u2192 epic + tasks created\n- [ ] Complex: title + description \u2192 epic shell created \u2192 opens split-view chat\n- [ ] Wizard dialog is modal with escape to close\n- [ ] Back/Next navigation between wizard steps\n- [ ] Loading state while IPC calls execute\n- [ ] Error handling with retry option on failure\n## Done summary\nTBD\n\n## Evidence\n- Commits:\n- Tests:\n- PRs:\n"
+    }
+  ]
+}

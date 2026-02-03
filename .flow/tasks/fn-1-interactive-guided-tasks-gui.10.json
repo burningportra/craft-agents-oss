@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-02-03T03:31:18.937090Z",
+  "depends_on": [
+    "fn-1-interactive-guided-tasks-gui.6"
+  ],
+  "epic": "fn-1-interactive-guided-tasks-gui",
+  "id": "fn-1-interactive-guided-tasks-gui.10",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-1-interactive-guided-tasks-gui.10.md",
+  "status": "todo",
+  "title": "Split-view epic chat: persistent history, write-with-confirmation",
+  "updated_at": "2026-02-03T03:41:36.228433Z"
+}

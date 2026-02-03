@@ -1178,6 +1178,23 @@ export interface SkillsNavigationState {
 }
 
 /**
+ * Tasks navigation state - shows TasksPage in navigator
+ */
+export interface TasksNavigationState {
+  navigator: 'tasks'
+  /** Optional filter by epic */
+  filter?: { epicId?: string }
+  /** Selected details view, or null for list/board view */
+  details:
+    | { type: 'epic'; epicId: string }
+    | { type: 'task'; epicId: string; taskId: string }
+    | { type: 'graph'; epicId: string }
+    | null
+  /** Optional right sidebar panel state */
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Unified navigation state - single source of truth for all 3 panels
  *
  * From this state we can derive:
@@ -1190,6 +1207,7 @@ export type NavigationState =
   | SourcesNavigationState
   | SettingsNavigationState
   | SkillsNavigationState
+  | TasksNavigationState
 
 /**
  * Type guard to check if state is chats navigation
@@ -1220,6 +1238,13 @@ export const isSkillsNavigation = (
 ): state is SkillsNavigationState => state.navigator === 'skills'
 
 /**
+ * Type guard to check if state is tasks navigation
+ */
+export const isTasksNavigation = (
+  state: NavigationState
+): state is TasksNavigationState => state.navigator === 'tasks'
+
+/**
  * Default navigation state - allChats with no selection
  */
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
@@ -1243,6 +1268,18 @@ export const getNavigationStateKey = (state: NavigationState): string => {
       return `skills/skill/${state.details.skillSlug}`
     }
     return 'skills'
+  }
+  if (state.navigator === 'tasks') {
+    if (state.details?.type === 'task') {
+      return `tasks/${state.details.epicId}/${state.details.taskId}`
+    }
+    if (state.details?.type === 'graph') {
+      return `tasks/${state.details.epicId}/graph`
+    }
+    if (state.details?.type === 'epic') {
+      return `tasks/${state.details.epicId}`
+    }
+    return 'tasks'
   }
   if (state.navigator === 'settings') {
     return `settings:${state.subpage}`
@@ -1283,6 +1320,22 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
       return { navigator: 'skills', details: { type: 'skill', skillSlug } }
     }
     return { navigator: 'skills', details: null }
+  }
+
+  // Handle tasks
+  if (key === 'tasks') return { navigator: 'tasks', details: null }
+  if (key.startsWith('tasks/')) {
+    const parts = key.slice(6).split('/')
+    if (parts.length === 1 && parts[0]) {
+      return { navigator: 'tasks', details: { type: 'epic', epicId: parts[0] } }
+    }
+    if (parts.length === 2 && parts[0]) {
+      if (parts[1] === 'graph') {
+        return { navigator: 'tasks', details: { type: 'graph', epicId: parts[0] } }
+      }
+      return { navigator: 'tasks', details: { type: 'task', epicId: parts[0], taskId: parts[1] } }
+    }
+    return { navigator: 'tasks', details: null }
   }
 
   // Handle settings

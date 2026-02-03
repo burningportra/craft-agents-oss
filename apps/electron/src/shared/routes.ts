@@ -155,6 +155,18 @@ export const routes = {
       subpage && subpage !== 'app'
         ? `settings/${subpage}` as const
         : 'settings' as const,
+
+    /** Tasks view (tasks navigator) */
+    tasks: () => 'tasks' as const,
+
+    /** Epic detail view */
+    epicDetail: (epicId: string) => `tasks/${epicId}` as const,
+
+    /** Task detail view */
+    taskDetail: (epicId: string, taskId: string) => `tasks/${epicId}/${taskId}` as const,
+
+    /** Dependency graph view for an epic */
+    taskGraph: (epicId: string) => `tasks/${epicId}/graph` as const,
   },
 } as const
 
