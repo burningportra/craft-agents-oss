@@ -84,9 +84,8 @@ Build the interactive onboarding tutorial for first-time users, guided error rec
 - [ ] Notifications only fire when window is not focused
 - [ ] Notification click navigates to relevant task/epic
 ## Done summary
-TBD
-
+Implemented onboarding tutorial with spotlight overlay (4 steps), error recovery panel with circuit breaker (localStorage-persisted), and OS notifications for task events (task completion, epic review ready, flowctl errors). Added notification triggers in TasksPage and proper IPC type safety.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 9abfdb0, e267602675882077bdc82e6307cde24771932a8f
+- Tests: bun typecheck (pre-existing errors only)
 - PRs:
