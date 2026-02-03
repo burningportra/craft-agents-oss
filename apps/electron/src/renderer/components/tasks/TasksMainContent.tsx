@@ -10,6 +10,7 @@
  * - Auto-selects best view based on epic state
  * - Persists view preference per epic
  * - Keeps inactive views mounted (display: none) to preserve state
+ * - Slide-over task detail panel on task click
  */
 
 import * as React from 'react'
@@ -22,6 +23,7 @@ import { EpicTabBar } from './EpicTabBar'
 import { ViewModeSelector } from './ViewModeSelector'
 import { ListView } from './ListView'
 import { KanbanBoard } from './KanbanBoard'
+import { TaskDetailSlideOver } from './TaskDetailSlideOver'
 import {
   openTabsAtom,
   activeTabAtom,
@@ -223,6 +225,34 @@ export function TasksMainContent({
   const openTabs = useAtomValue(openTabsAtom)
   const activeTab = useAtomValue(activeTabAtom)
 
+  // Slide-over state
+  const [slideOverOpen, setSlideOverOpen] = React.useState(false)
+  const [selectedTaskId, setSelectedTaskId] = React.useState<string | null>(null)
+  const [selectedTaskEpicId, setSelectedTaskEpicId] = React.useState<string | null>(null)
+
+  // Handle task click - open slide-over
+  const handleTaskClick = React.useCallback(
+    (epicId: string, taskId: string) => {
+      setSelectedTaskId(taskId)
+      setSelectedTaskEpicId(epicId)
+      setSlideOverOpen(true)
+      // Also call parent callback if provided
+      onTaskClick?.(epicId, taskId)
+    },
+    [onTaskClick]
+  )
+
+  // Handle task navigation from within slide-over (clicking a dependency)
+  const handleTaskNavigate = React.useCallback(
+    (taskId: string) => {
+      // Keep the slide-over open but switch to the new task
+      setSelectedTaskId(taskId)
+      // Note: For simplicity, we keep the same epicId since deps are usually in the same epic
+      // If cross-epic navigation is needed, we'd need to resolve the task's epic
+    },
+    []
+  )
+
   // No tabs open - show empty state
   if (openTabs.length === 0 || !activeTab) {
     return (
@@ -255,10 +285,20 @@ export function TasksMainContent({
             epicId={epicId}
             workspaceRoot={workspaceRoot}
             isActive={epicId === activeTab}
-            onTaskClick={(taskId) => onTaskClick?.(epicId, taskId)}
+            onTaskClick={(taskId) => handleTaskClick(epicId, taskId)}
           />
         ))}
       </div>
+
+      {/* Task detail slide-over */}
+      <TaskDetailSlideOver
+        open={slideOverOpen}
+        onOpenChange={setSlideOverOpen}
+        taskId={selectedTaskId}
+        epicId={selectedTaskEpicId ?? activeTab}
+        workspaceRoot={workspaceRoot}
+        onTaskNavigate={handleTaskNavigate}
+      />
     </div>
   )
 }
