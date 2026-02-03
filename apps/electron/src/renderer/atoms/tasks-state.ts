@@ -235,13 +235,15 @@ export const resetTasksStateAtom = atom(
  * Action atom: Update task status via drag-drop
  * Performs optimistic update with rollback on failure.
  * Shows sonner toast on error.
+ *
+ * @param workspaceRoot - Workspace path for IPC calls
+ * @param epicId - Epic ID the task belongs to (avoids fragile ID parsing)
+ * @param taskId - Task ID to update
+ * @param newStatus - Target status
  */
 export const updateTaskStatusAtom = atom(
   null,
-  async (get, set, workspaceRoot: string, taskId: string, newStatus: TaskStatus) => {
-    // Find the task's epic to update the correct atom
-    // Task ID format: epicId.taskNumber (e.g., "fn-1.2")
-    const epicId = taskId.split('.').slice(0, -1).join('.')
+  async (get, set, workspaceRoot: string, epicId: string, taskId: string, newStatus: TaskStatus) => {
 
     const tasksAtom = tasksAtomFamily(epicId)
     const currentTasks = get(tasksAtom)

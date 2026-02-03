@@ -57,6 +57,9 @@ const COLUMNS: Array<{ status: TaskStatus; title: string }> = [
   { status: 'done', title: 'Done' },
 ]
 
+/** Valid status values for drop target validation */
+const VALID_STATUSES = COLUMNS.map((c) => c.status)
+
 /**
  * Convert TaskSummary to TaskCardData
  */
@@ -170,22 +173,30 @@ export function KanbanBoard({
       if (!over) return
 
       const sourceTask = active.data.current?.task as TaskCardData | undefined
-      const targetStatus = over.id as TaskStatus
 
       if (!sourceTask) return
+
+      // Validate drop target is a known status
+      const targetStatusStr = over.id as string
+      if (!VALID_STATUSES.includes(targetStatusStr as TaskStatus)) {
+        console.warn('[KanbanBoard] Invalid drop target:', over.id)
+        return
+      }
+      const targetStatus = targetStatusStr as TaskStatus
 
       // No-op if dropping in same column
       if (sourceTask.status === targetStatus) return
 
       // Optimistic update via atom action (handles rollback internally)
+      // Pass epicId explicitly to avoid fragile task ID parsing
       try {
-        await updateTaskStatus(workspaceRoot, sourceTask.id, targetStatus)
+        await updateTaskStatus(workspaceRoot, epicId, sourceTask.id, targetStatus)
       } catch (err) {
         // updateTaskStatus atom already shows toast on failure
         console.error('[KanbanBoard] Status update failed:', err)
       }
     },
-    [workspaceRoot, updateTaskStatus]
+    [workspaceRoot, epicId, updateTaskStatus]
   )
 
   // Handle drag cancel

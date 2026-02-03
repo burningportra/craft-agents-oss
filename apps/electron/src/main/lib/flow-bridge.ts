@@ -178,7 +178,9 @@ export class FlowBridge {
       case 'in_progress':
         return this.execWrite(['start', taskId], CommandSuccessSchema)
       case 'done':
-        // Use --force to skip checks, --summary for required summary
+        // Use --force to skip evidence checks (commits/tests) since GUI status changes
+        // don't include evidence. Dependency validation still runs via flowctl internally.
+        // --summary is required by flowctl.
         return this.execWrite(['done', taskId, '--summary', 'Status changed via GUI', '--force'], CommandSuccessSchema)
       case 'blocked':
         // Blocking requires a reason file - not supported via simple drag-drop
