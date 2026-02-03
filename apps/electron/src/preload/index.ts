@@ -478,8 +478,17 @@ const api: ElectronAPI = {
   },
 
   // Flow notifications
-  onFlowNotificationNavigate: (callback: (event: { type: string; epicId?: string; taskId?: string }) => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, payload: { type: string; epicId?: string; taskId?: string }) => {
+  // FlowNotificationType = 'task_completed' | 'epic_review_ready' | 'flowctl_error'
+  onFlowNotificationNavigate: (callback: (event: {
+    type: 'task_completed' | 'epic_review_ready' | 'flowctl_error'
+    epicId?: string
+    taskId?: string
+  }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: {
+      type: 'task_completed' | 'epic_review_ready' | 'flowctl_error'
+      epicId?: string
+      taskId?: string
+    }) => {
       callback(payload)
     }
     ipcRenderer.on(IPC_CHANNELS.FLOW_NOTIFICATION_NAVIGATE, handler)
@@ -488,7 +497,7 @@ const api: ElectronAPI = {
     }
   },
   showFlowNotification: (params: {
-    type: string
+    type: 'task_completed' | 'epic_review_ready' | 'flowctl_error'
     title: string
     body: string
     workspaceId: string

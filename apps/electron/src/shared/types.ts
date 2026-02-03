@@ -1045,9 +1045,14 @@ export interface ElectronAPI {
   onFlowChanged(callback: (workspaceRoot: string, payload: { type: 'epic' | 'task' | 'config'; id?: string }) => void): () => void
 
   // Flow notifications
-  onFlowNotificationNavigate(callback: (event: { type: string; epicId?: string; taskId?: string }) => void): () => void
+  // Note: FlowNotificationType = 'task_completed' | 'epic_review_ready' | 'flowctl_error'
+  onFlowNotificationNavigate(callback: (event: {
+    type: 'task_completed' | 'epic_review_ready' | 'flowctl_error'
+    epicId?: string
+    taskId?: string
+  }) => void): () => void
   showFlowNotification(params: {
-    type: string
+    type: 'task_completed' | 'epic_review_ready' | 'flowctl_error'
     title: string
     body: string
     workspaceId: string

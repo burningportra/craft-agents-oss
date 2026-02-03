@@ -71,7 +71,7 @@ export function useFlowNotifications({
   useEffect(() => {
     if (!enabled) return
 
-    const handleNavigate = (event: { type: string; epicId?: string; taskId?: string }) => {
+    const handleNavigate = (event: FlowNotificationNavigateEvent) => {
       console.log('[useFlowNotifications] Navigate event:', event)
 
       if (event.taskId && event.epicId) {

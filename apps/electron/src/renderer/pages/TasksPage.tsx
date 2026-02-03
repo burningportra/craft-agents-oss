@@ -9,6 +9,7 @@
  * - Persists tab and view state across sessions
  * - Epic creation wizard (Quick/Standard/Complex templates)
  * - Onboarding tutorial for first-time users
+ * - OS notifications for task events
  */
 
 import * as React from 'react'
@@ -18,17 +19,27 @@ import { useActiveWorkspace } from '@/context/AppShellContext'
 import { TasksMainContent } from '@/components/tasks/TasksMainContent'
 import { EpicCreationWizard } from '@/components/tasks/EpicCreationWizard'
 import { OnboardingTutorial, useOnboardingComplete, markOnboardingComplete } from '@/components/tasks/OnboardingTutorial'
-import { epicsAtom, epicsLoadingStateAtom, openEpicTabAtom, epicWizardOpenAtom } from '@/atoms/tasks-state'
+import {
+  useFlowNotifications,
+  useTaskCompletionNotifications,
+  useEpicReviewReadyNotifications,
+} from '@/hooks/useFlowNotifications'
+import { epicsAtom, epicsLoadingStateAtom, activeTabAtom, openEpicTabAtom, epicWizardOpenAtom } from '@/atoms/tasks-state'
 import { navigate, routes } from '@/lib/navigate'
+
+/** Delay (ms) before showing tutorial after initialization - allows UI to settle */
+const TUTORIAL_TRIGGER_DELAY_MS = 500
 
 export function TasksPage() {
   const navState = useNavigationState()
   const workspace = useActiveWorkspace()
   const epics = useAtomValue(epicsAtom)
   const epicsLoadingState = useAtomValue(epicsLoadingStateAtom)
+  const activeEpicId = useAtomValue(activeTabAtom)
   const openEpicTab = useSetAtom(openEpicTabAtom)
 
   const workspaceRoot = workspace?.rootPath
+  const workspaceId = workspace?.id ?? null
 
   // Wizard dialog state - using atom so it can be triggered from AppShell header too
   const [wizardOpen, setWizardOpen] = useAtom(epicWizardOpenAtom)
@@ -37,29 +48,79 @@ export function TasksPage() {
   const isOnboardingComplete = useOnboardingComplete()
   const [showTutorial, setShowTutorial] = React.useState(false)
   const previousLoadingStateRef = React.useRef<string | null>(null)
+  // Track if we just did a fresh initialization (to trigger tutorial even with example epics)
+  const justInitializedRef = React.useRef(false)
+
+  // Flow notifications setup
+  const { requestNotification } = useFlowNotifications({
+    onNavigateToEpic: React.useCallback((epicId: string) => {
+      openEpicTab(epicId)
+    }, [openEpicTab]),
+    onNavigateToTask: React.useCallback((epicId: string, taskId: string) => {
+      openEpicTab(epicId)
+      // Task detail navigation handled by TasksMainContent
+    }, [openEpicTab]),
+    enabled: !!workspaceId,
+  })
+
+  // Task completion notifications - watch active epic for task completions
+  useTaskCompletionNotifications(
+    workspaceId,
+    activeEpicId,
+    React.useCallback((taskId: string, taskTitle: string) => {
+      if (!workspaceId || !activeEpicId) return
+      requestNotification({
+        type: 'task_completed',
+        title: 'Task Completed',
+        body: taskTitle,
+        workspaceId,
+        epicId: activeEpicId,
+        taskId,
+        priority: 'low',
+      })
+    }, [workspaceId, activeEpicId, requestNotification])
+  )
+
+  // Epic review ready notifications - watch for all tasks done
+  useEpicReviewReadyNotifications(
+    workspaceId,
+    activeEpicId,
+    React.useCallback((epicId: string, epicTitle: string) => {
+      if (!workspaceId) return
+      requestNotification({
+        type: 'epic_review_ready',
+        title: 'Epic Ready for Review',
+        body: `All tasks complete: ${epicTitle}`,
+        workspaceId,
+        epicId,
+        priority: 'low',
+      })
+    }, [workspaceId, requestNotification])
+  )
 
   // Trigger tutorial after first successful .flow/ initialization
   // Detected by: loading state transitions from 'error' (no-flow-directory) to 'success'
+  // Note: flowctl init may create example epics, so we don't check epics.length === 0
   React.useEffect(() => {
     const prevState = previousLoadingStateRef.current
 
-    // Check if we just transitioned from error/idle to success with 0 epics
-    // This indicates a fresh initialization
+    // Detect fresh initialization: transition from error to success
+    // This happens when user clicks "Initialize Flow-Next" in TasksEmptyState
     if (
       !isOnboardingComplete &&
       epicsLoadingState === 'success' &&
-      epics.length === 0 &&
       (prevState === 'error' || prevState === 'idle')
     ) {
-      // Small delay to let the UI settle
+      justInitializedRef.current = true
+      // Delay to let the UI settle after loading completes
       const timer = setTimeout(() => {
         setShowTutorial(true)
-      }, 500)
+      }, TUTORIAL_TRIGGER_DELAY_MS)
       return () => clearTimeout(timer)
     }
 
     previousLoadingStateRef.current = epicsLoadingState
-  }, [epicsLoadingState, epics.length, isOnboardingComplete])
+  }, [epicsLoadingState, isOnboardingComplete])
 
   // Handle task click - could open detail panel (task 7)
   const handleTaskClick = React.useCallback((epicId: string, taskId: string) => {

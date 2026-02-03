@@ -37,19 +37,52 @@ import {
 import type { FlowBridgeError } from '../../../shared/flow-schemas'
 
 // ─── Circuit Breaker ───────────────────────────────────────────────────────────
-
-/** Track failure counts per command type */
-const failureCounts = new Map<string, number>()
+// Circuit breaker state is persisted to localStorage to survive app restarts.
+// State is keyed by command type (e.g., "epic-list", "task-update-status").
 
 /** Max consecutive failures before circuit opens */
 const MAX_FAILURES = 3
+
+/** localStorage key prefix for circuit breaker state */
+const CIRCUIT_BREAKER_KEY_PREFIX = 'craft-flow-circuit-breaker-'
+
+/**
+ * Get failure count from localStorage.
+ */
+function getStoredFailureCount(commandType: string): number {
+  try {
+    const stored = localStorage.getItem(`${CIRCUIT_BREAKER_KEY_PREFIX}${commandType}`)
+    if (stored) {
+      const count = parseInt(stored, 10)
+      return isNaN(count) ? 0 : count
+    }
+  } catch {
+    // localStorage not available
+  }
+  return 0
+}
+
+/**
+ * Set failure count in localStorage.
+ */
+function setStoredFailureCount(commandType: string, count: number): void {
+  try {
+    if (count === 0) {
+      localStorage.removeItem(`${CIRCUIT_BREAKER_KEY_PREFIX}${commandType}`)
+    } else {
+      localStorage.setItem(`${CIRCUIT_BREAKER_KEY_PREFIX}${commandType}`, String(count))
+    }
+  } catch {
+    // localStorage not available
+  }
+}
 
 /**
  * Circuit breaker state for a command type.
  * Returns true if circuit is open (should not retry).
  */
 export function isCircuitOpen(commandType: string): boolean {
-  return (failureCounts.get(commandType) ?? 0) >= MAX_FAILURES
+  return getStoredFailureCount(commandType) >= MAX_FAILURES
 }
 
 /**
@@ -57,8 +90,8 @@ export function isCircuitOpen(commandType: string): boolean {
  * Increments failure count and returns whether circuit is now open.
  */
 export function recordFailure(commandType: string): boolean {
-  const count = (failureCounts.get(commandType) ?? 0) + 1
-  failureCounts.set(commandType, count)
+  const count = getStoredFailureCount(commandType) + 1
+  setStoredFailureCount(commandType, count)
   console.log(`[CircuitBreaker] ${commandType}: ${count}/${MAX_FAILURES} failures`)
   return count >= MAX_FAILURES
 }
@@ -67,9 +100,10 @@ export function recordFailure(commandType: string): boolean {
  * Reset circuit breaker for a command type (on success).
  */
 export function resetCircuit(commandType: string): void {
-  if (failureCounts.has(commandType)) {
+  const count = getStoredFailureCount(commandType)
+  if (count > 0) {
     console.log(`[CircuitBreaker] ${commandType}: reset on success`)
-    failureCounts.delete(commandType)
+    setStoredFailureCount(commandType, 0)
   }
 }
 
@@ -77,14 +111,26 @@ export function resetCircuit(commandType: string): void {
  * Reset all circuit breakers (e.g., on workspace change).
  */
 export function resetAllCircuits(): void {
-  failureCounts.clear()
+  try {
+    // Find and remove all circuit breaker keys
+    const keysToRemove: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key?.startsWith(CIRCUIT_BREAKER_KEY_PREFIX)) {
+        keysToRemove.push(key)
+      }
+    }
+    keysToRemove.forEach(key => localStorage.removeItem(key))
+  } catch {
+    // localStorage not available
+  }
 }
 
 /**
- * Get failure count for a command type.
+ * Get failure count for a command type (public API).
  */
 export function getFailureCount(commandType: string): number {
-  return failureCounts.get(commandType) ?? 0
+  return getStoredFailureCount(commandType)
 }
 
 // ─── Component Props ───────────────────────────────────────────────────────────
