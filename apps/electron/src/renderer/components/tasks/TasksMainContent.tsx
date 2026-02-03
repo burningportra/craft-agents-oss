@@ -204,29 +204,30 @@ function EpicHeader({
 
   return (
     <div className="px-6 py-4 border-b border-border/50">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex-1 min-w-0">
-          <h1 className="text-lg font-semibold truncate">{epic.title}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{epic.id}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <ChatToggleButton isOpen={isChatOpen} onClick={onChatToggle} />
-          <SuggestionToggleButton
-            isOpen={isSuggestionSidebarOpen}
-            onClick={onSuggestionToggle}
-            suggestionCount={suggestionCount}
-          />
-          <EpicViewSelector epicId={epicId} />
-          <Badge
-            variant={epic.status === 'done' ? 'secondary' : 'outline'}
-            className={cn(
-              epic.status === 'done' &&
-                'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-            )}
-          >
-            {epic.status === 'done' ? 'Done' : 'Open'}
-          </Badge>
-        </div>
+      {/* Title row */}
+      <h1 className="text-lg font-semibold">{epic.title}</h1>
+
+      {/* Epic ID row */}
+      <p className="text-sm text-muted-foreground mt-1">{epic.id}</p>
+
+      {/* Controls row */}
+      <div className="flex items-center gap-3 mt-3">
+        <ChatToggleButton isOpen={isChatOpen} onClick={onChatToggle} />
+        <SuggestionToggleButton
+          isOpen={isSuggestionSidebarOpen}
+          onClick={onSuggestionToggle}
+          suggestionCount={suggestionCount}
+        />
+        <EpicViewSelector epicId={epicId} />
+        <Badge
+          variant={epic.status === 'done' ? 'secondary' : 'outline'}
+          className={cn(
+            epic.status === 'done' &&
+              'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+          )}
+        >
+          {epic.status === 'done' ? 'Done' : 'Open'}
+        </Badge>
       </div>
 
       {/* Progress bar */}
@@ -379,7 +380,7 @@ export function TasksMainContent({
   const mainContent = (
     <div className="flex flex-col h-full">
       {/* Tab bar */}
-      <EpicTabBar onAddTab={onAddTab} />
+      <EpicTabBar workspaceRoot={workspaceRoot} onAddTab={onAddTab} />
 
       {/* Epic header (for active tab) */}
       <EpicHeader

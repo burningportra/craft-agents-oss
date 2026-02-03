@@ -1,15 +1,19 @@
 import { execFile } from 'child_process'
-import { existsSync } from 'fs'
+import { existsSync, unlinkSync, readdirSync } from 'fs'
 import { join } from 'path'
 import {
   CommandSuccessSchema,
   EpicListResponseSchema,
   EpicSchema,
+  EpicCreateResponseSchema,
+  EpicSetPlanResponseSchema,
   TaskListResponseSchema,
   TaskSchema,
   type CommandSuccess,
   type EpicListResponse,
   type Epic,
+  type EpicCreateResponse,
+  type EpicSetPlanResponse,
   type TaskListResponse,
   type Task,
   type TaskStatus,
@@ -207,5 +211,155 @@ export class FlowBridge {
   /** Initialize flow-next in workspace */
   init(): Promise<FlowBridgeResult<CommandSuccess>> {
     return this.execWrite(['init'], CommandSuccessSchema)
+  }
+
+  /** Create a new epic */
+  createEpic(title: string, branch?: string): Promise<FlowBridgeResult<EpicCreateResponse>> {
+    const args = ['epic', 'create', '--title', title]
+    if (branch) {
+      args.push('--branch', branch)
+    }
+    return this.execWrite(args, EpicCreateResponseSchema)
+  }
+
+  /**
+   * Set epic plan/spec content.
+   * Uses stdin to pass content (--file -)
+   */
+  setEpicPlan(epicId: string, content: string): Promise<FlowBridgeResult<EpicSetPlanResponse>> {
+    return this.execWriteWithStdin(
+      ['epic', 'set-plan', epicId, '--file', '-'],
+      content,
+      EpicSetPlanResponseSchema
+    )
+  }
+
+  /** Delete an epic and its tasks by removing files directly */
+  deleteEpic(epicId: string): Promise<FlowBridgeResult<CommandSuccess>> {
+    const deleteOperation = async (): Promise<FlowBridgeResult<CommandSuccess>> => {
+      try {
+        const flowDir = join(this.workspaceRoot, '.flow')
+        const epicsDir = join(flowDir, 'epics')
+        const specsDir = join(flowDir, 'specs')
+        const tasksDir = join(flowDir, 'tasks')
+
+        // Delete epic JSON file
+        const epicJsonPath = join(epicsDir, `${epicId}.json`)
+        if (existsSync(epicJsonPath)) {
+          unlinkSync(epicJsonPath)
+        }
+
+        // Delete epic spec file
+        const epicSpecPath = join(specsDir, `${epicId}.md`)
+        if (existsSync(epicSpecPath)) {
+          unlinkSync(epicSpecPath)
+        }
+
+        // Delete all task files for this epic (pattern: <epicId>.<n>.json and <epicId>.<n>.md)
+        if (existsSync(tasksDir)) {
+          const taskFiles = readdirSync(tasksDir)
+          for (const file of taskFiles) {
+            if (file.startsWith(`${epicId}.`)) {
+              unlinkSync(join(tasksDir, file))
+            }
+          }
+        }
+
+        return { ok: true, data: { success: true } }
+      } catch (err) {
+        return {
+          ok: false,
+          error: {
+            type: 'command_failed' as const,
+            exitCode: 1,
+            stderr: err instanceof Error ? err.message : 'Failed to delete epic files',
+          },
+        }
+      }
+    }
+
+    const promise = this.writeQueue.then(deleteOperation)
+    this.writeQueue = promise.catch((err) => {
+      console.error('[FlowBridge] Delete operation failed:', err)
+    })
+    return promise
+  }
+
+  /** Execute a write flowctl command with stdin input (for set-plan) */
+  private execWriteWithStdin<T>(args: string[], stdin: string, schema: ZodSchema<T>): Promise<FlowBridgeResult<T>> {
+    const promise = this.writeQueue.then(() => this.runCommandWithStdin(args, stdin, schema))
+    this.writeQueue = promise.catch((err) => {
+      console.error('[FlowBridge] Write operation failed:', err)
+    })
+    return promise
+  }
+
+  private runCommandWithStdin<T>(args: string[], stdin: string, schema: ZodSchema<T>): Promise<FlowBridgeResult<T>> {
+    return new Promise((resolve) => {
+      const flowctl = this.resolveFlowctl()
+      const fullArgs = [...args, '--json']
+
+      const child = execFile(
+        flowctl,
+        fullArgs,
+        {
+          cwd: this.workspaceRoot,
+          timeout: TIMEOUT_MS,
+          maxBuffer: 1024 * 1024,
+          env: { ...process.env },
+        },
+        (error, stdout, stderr) => {
+          if (error) {
+            if (error.killed || (error as NodeJS.ErrnoException).code === 'ETIMEDOUT') {
+              return resolve({
+                ok: false,
+                error: { type: 'timeout', command: `flowctl ${args.join(' ')}` },
+              })
+            }
+            if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+              this.flowctlPath = null
+              return resolve({ ok: false, error: { type: 'flowctl_not_found' } })
+            }
+            return resolve({
+              ok: false,
+              error: {
+                type: 'command_failed',
+                stderr: stderr || error.message,
+                exitCode: error.code ? Number(error.code) : 1,
+              },
+            })
+          }
+
+          let parsed: unknown
+          try {
+            parsed = JSON.parse(stdout)
+          } catch {
+            return resolve({
+              ok: false,
+              error: {
+                type: 'invalid_json',
+                stdout: stdout.slice(0, 500),
+              },
+            })
+          }
+
+          const result = schema.safeParse(parsed)
+          if (!result.success) {
+            return resolve({
+              ok: false,
+              error: { type: 'invalid_output', zodError: result.error as ZodError },
+            })
+          }
+
+          resolve({ ok: true, data: result.data })
+        },
+      )
+
+      // Write to stdin and close
+      if (child.stdin) {
+        child.stdin.write(stdin)
+        child.stdin.end()
+      }
+    })
   }
 }

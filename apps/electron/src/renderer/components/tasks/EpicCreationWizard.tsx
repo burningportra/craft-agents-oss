@@ -31,9 +31,9 @@ import {
 import { QuickEpicStep } from './QuickEpicStep'
 import { StandardInterviewStep, type StandardEpicFormData } from './StandardInterviewStep'
 import { ComplexEpicStep, type ComplexEpicFormData } from './ComplexEpicStep'
-import type { EpicSummary } from '../../../shared/flow-schemas'
+import type { EpicSummary, FlowBridgeError } from '../../../shared/flow-schemas'
 
-// ─── Error Helper ─────────────────────────────────────────────────────────────
+// ─── Error Helpers ─────────────────────────────────────────────────────────────
 
 function getErrorMessage(err: unknown): string {
   if (err instanceof Error) {
@@ -44,6 +44,74 @@ function getErrorMessage(err: unknown): string {
     return err.message
   }
   return 'An unexpected error occurred'
+}
+
+function getFlowBridgeErrorMessage(error: FlowBridgeError): string {
+  switch (error.type) {
+    case 'flowctl_not_found':
+      return 'Flow CLI not found. Make sure flowctl is installed in .flow/bin/'
+    case 'invalid_json':
+      return 'Unexpected response from Flow CLI.'
+    case 'invalid_output':
+      return 'Invalid response format from Flow CLI.'
+    case 'command_failed':
+      return error.stderr || 'Flow command failed.'
+    case 'timeout':
+      return 'Command timed out. Please try again.'
+  }
+}
+
+// ─── Spec Generation ───────────────────────────────────────────────────────────
+
+function generateStandardEpicSpec(data: StandardEpicFormData, epicId: string): string {
+  const lines: string[] = [
+    `# ${data.title}`,
+    '',
+    `Epic ID: ${epicId}`,
+    '',
+  ]
+
+  if (data.description) {
+    lines.push('## Description', '', data.description, '')
+  }
+
+  if (data.acceptanceCriteria) {
+    lines.push('## Acceptance Criteria', '')
+    const criteria = data.acceptanceCriteria.split('\n').filter(Boolean)
+    criteria.forEach(c => lines.push(`- [ ] ${c.trim()}`))
+    lines.push('')
+  }
+
+  if (data.dependsOnEpic) {
+    lines.push('## Dependencies', '', `- Depends on: ${data.dependsOnEpic}`, '')
+  }
+
+  lines.push('## Complexity', '', `Estimated: ${data.complexity}`, '')
+
+  if (data.technicalNotes) {
+    lines.push('## Technical Notes', '', data.technicalNotes, '')
+  }
+
+  return lines.join('\n')
+}
+
+function generateComplexEpicSpec(data: ComplexEpicFormData, epicId: string): string {
+  const lines: string[] = [
+    `# ${data.title}`,
+    '',
+    `Epic ID: ${epicId}`,
+    '',
+    '## Initial Description',
+    '',
+    data.description || '_To be defined through planning chat._',
+    '',
+    '## Tasks',
+    '',
+    '_To be created during planning session._',
+    '',
+  ]
+
+  return lines.join('\n')
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -190,29 +258,23 @@ export function EpicCreationWizard({
       setError(null)
 
       try {
-        // For now, we'll create a basic spec from the description
-        // TODO: Wire up to actual flowctl epic create command when available
-        // The epic creation IPC isn't implemented yet (FLOW_EPIC_CREATE)
-        // For now, show a success message and close
+        // Extract title from description (first sentence or first ~60 chars)
+        const title = description.split(/[.\n]/)[0].slice(0, 100).trim() || description.slice(0, 60)
 
-        // Simulate API call for demo purposes (with abort support)
-        await new Promise((resolve, reject) => {
-          const timeout = setTimeout(resolve, 500)
-          controller.signal.addEventListener('abort', () => {
-            clearTimeout(timeout)
-            reject(new DOMException('Aborted', 'AbortError'))
-          })
-        })
+        const result = await window.electronAPI.flowEpicCreate(workspaceRoot, title)
 
-        // Check if aborted before proceeding
         if (controller.signal.aborted) return
 
-        toast.success('Epic creation not yet implemented', {
-          description: 'The flowctl epic create command will be wired up in a future task.',
+        if (!result.ok) {
+          throw new Error(getFlowBridgeErrorMessage(result.error))
+        }
+
+        toast.success('Epic created!', {
+          description: 'Run /plan in the chat to generate tasks.',
         })
 
-        // Close dialog
         onOpenChange(false)
+        onEpicCreated(result.data.id)
       } catch (err) {
         // Don't show error for intentional aborts
         if (err instanceof DOMException && err.name === 'AbortError') return
@@ -223,7 +285,7 @@ export function EpicCreationWizard({
         }
       }
     },
-    [onOpenChange]
+    [workspaceRoot, onOpenChange, onEpicCreated]
   )
 
   // Standard epic creation
@@ -238,28 +300,32 @@ export function EpicCreationWizard({
       setError(null)
 
       try {
-        // TODO: Wire up to actual flowctl epic create command when available
-        // The epic creation IPC isn't implemented yet (FLOW_EPIC_CREATE)
-        // For now, show a success message and close
+        // Step 1: Create epic with title
+        const createResult = await window.electronAPI.flowEpicCreate(workspaceRoot, data.title)
 
-        // Simulate API call for demo purposes (with abort support)
-        await new Promise((resolve, reject) => {
-          const timeout = setTimeout(resolve, 500)
-          controller.signal.addEventListener('abort', () => {
-            clearTimeout(timeout)
-            reject(new DOMException('Aborted', 'AbortError'))
-          })
-        })
-
-        // Check if aborted before proceeding
         if (controller.signal.aborted) return
+        if (!createResult.ok) {
+          throw new Error(getFlowBridgeErrorMessage(createResult.error))
+        }
 
-        toast.success('Epic creation not yet implemented', {
-          description: 'The flowctl epic create command will be wired up in a future task.',
+        const epicId = createResult.data.id
+
+        // Step 2: Set full spec with all form data
+        const specContent = generateStandardEpicSpec(data, epicId)
+        const planResult = await window.electronAPI.flowEpicSetPlan(workspaceRoot, epicId, specContent)
+
+        if (controller.signal.aborted) return
+        if (!planResult.ok) {
+          // Epic was created but spec update failed - log but don't block
+          console.error('[EpicCreation] Failed to set plan:', planResult.error)
+        }
+
+        toast.success('Epic created!', {
+          description: 'Run /plan in the chat to generate tasks.',
         })
 
-        // Close dialog
         onOpenChange(false)
+        onEpicCreated(epicId)
       } catch (err) {
         // Don't show error for intentional aborts
         if (err instanceof DOMException && err.name === 'AbortError') return
@@ -270,7 +336,7 @@ export function EpicCreationWizard({
         }
       }
     },
-    [onOpenChange]
+    [workspaceRoot, onOpenChange, onEpicCreated]
   )
 
   // Complex epic creation
@@ -285,30 +351,38 @@ export function EpicCreationWizard({
       setError(null)
 
       try {
-        // TODO: Wire up to actual flowctl epic create command when available
-        // The epic creation IPC isn't implemented yet (FLOW_EPIC_CREATE)
-        // For now, show a success message and close
+        // Create epic shell
+        const createResult = await window.electronAPI.flowEpicCreate(workspaceRoot, data.title)
 
-        // Simulate API call for demo purposes (with abort support)
-        await new Promise((resolve, reject) => {
-          const timeout = setTimeout(resolve, 500)
-          controller.signal.addEventListener('abort', () => {
-            clearTimeout(timeout)
-            reject(new DOMException('Aborted', 'AbortError'))
-          })
-        })
-
-        // Check if aborted before proceeding
         if (controller.signal.aborted) return
+        if (!createResult.ok) {
+          throw new Error(getFlowBridgeErrorMessage(createResult.error))
+        }
 
-        toast.success('Epic creation not yet implemented', {
-          description: 'The flowctl epic create command will be wired up in a future task. Split-view chat (task 10) will open after creation.',
+        const epicId = createResult.data.id
+
+        // If description provided, set initial spec
+        if (data.description?.trim()) {
+          const specContent = generateComplexEpicSpec(data, epicId)
+          const planResult = await window.electronAPI.flowEpicSetPlan(workspaceRoot, epicId, specContent)
+
+          if (controller.signal.aborted) return
+          if (!planResult.ok) {
+            console.error('[EpicCreation] Failed to set plan:', planResult.error)
+          }
+        }
+
+        toast.success('Epic created!', {
+          description: onOpenChat
+            ? 'Opening chat to help plan tasks...'
+            : 'Run /plan in the chat to generate tasks.',
         })
 
-        // TODO: Call onOpenChat(epicId) to open split-view chat
-
-        // Close dialog
         onOpenChange(false)
+        onEpicCreated(epicId)
+
+        // Open split-view chat for complex epic planning
+        onOpenChat?.(epicId)
       } catch (err) {
         // Don't show error for intentional aborts
         if (err instanceof DOMException && err.name === 'AbortError') return
@@ -319,7 +393,7 @@ export function EpicCreationWizard({
         }
       }
     },
-    [onOpenChange]
+    [workspaceRoot, onOpenChange, onEpicCreated, onOpenChat]
   )
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -327,7 +401,7 @@ export function EpicCreationWizard({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="sm:max-w-[560px] p-0 overflow-hidden"
+        className="sm:max-w-[560px] p-0 max-h-[85vh] flex flex-col"
         showCloseButton={!isCreating}
         aria-labelledby="epic-wizard-title"
         aria-describedby="epic-wizard-description"
@@ -337,7 +411,7 @@ export function EpicCreationWizard({
         <DialogDescription id="epic-wizard-description" className="sr-only">
           Wizard to create a new epic. Choose a template and fill out the form.
         </DialogDescription>
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto flex-1 flex flex-col items-center">
           <AnimatePresence mode="wait" onExitComplete={handleCloseAnimationComplete}>
             {step === 'template' && (
               <motion.div

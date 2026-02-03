@@ -194,7 +194,7 @@ export function StandardInterviewStep({
   return (
     <form
       onSubmit={handleSubmit}
-      className={cn('flex flex-col items-center w-full max-w-lg', className)}
+      className={cn('flex flex-col items-center w-full', className)}
       data-testid="standard-epic-step"
       aria-label="Standard epic creation form"
     >
@@ -212,8 +212,8 @@ export function StandardInterviewStep({
       </div>
 
       {/* Form */}
-      <ScrollArea className="w-full max-h-[400px] pr-4">
-        <div className="w-full space-y-5">
+      <ScrollArea className="w-full max-h-[50vh]">
+        <div className="w-full space-y-5 px-1">
           {/* Title */}
           <div className="space-y-2">
             <Label htmlFor={ids.title} className="text-sm font-medium">
@@ -377,7 +377,7 @@ export function StandardInterviewStep({
       {displayError && (
         <div
           role="alert"
-          className="flex items-center gap-2 text-sm text-destructive mt-4 w-full"
+          className="flex items-center justify-center gap-2 text-sm text-destructive mt-4 w-full"
           data-testid="standard-epic-error"
         >
           <AlertCircle className="size-4 shrink-0" aria-hidden="true" />

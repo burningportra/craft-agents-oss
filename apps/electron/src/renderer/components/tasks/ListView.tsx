@@ -7,16 +7,19 @@
 
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { Circle, CheckCircle2, Loader2, AlertCircle, ChevronRight } from 'lucide-react'
+import { Circle, CheckCircle2, Loader2, AlertCircle, ChevronRight, Sparkles, MessageSquare, ListTodo } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { TaskStatus, TaskSummary } from '../../../shared/flow-schemas'
 import {
   tasksAtomFamily,
   tasksLoadingAtomFamily,
   loadTasksAtom,
+  suggestionSidebarOpenAtom,
 } from '@/atoms/tasks-state'
+import { epicChatOpenAtom } from './EpicChatPanel'
 
 export interface ListViewProps {
   /** Epic ID to display tasks for */
@@ -27,6 +30,58 @@ export interface ListViewProps {
   onTaskClick?: (taskId: string) => void
   /** Optional className */
   className?: string
+}
+
+/**
+ * Empty state component shown when epic has no tasks.
+ * Provides actionable guidance for what to do next.
+ */
+function EmptyTasksState() {
+  const setIsChatOpen = useSetAtom(epicChatOpenAtom)
+  const setIsSuggestionsOpen = useSetAtom(suggestionSidebarOpenAtom)
+
+  const handleOpenChat = React.useCallback(() => {
+    setIsChatOpen(true)
+  }, [setIsChatOpen])
+
+  const handleOpenSuggestions = React.useCallback(() => {
+    setIsSuggestionsOpen(true)
+  }, [setIsSuggestionsOpen])
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+      <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center mb-4">
+        <ListTodo className="h-6 w-6 text-blue-500" />
+      </div>
+      <h3 className="text-base font-medium mb-1">No tasks yet</h3>
+      <p className="text-sm text-muted-foreground mb-6 max-w-[280px]">
+        This epic needs tasks to work on. Use AI to plan tasks or check suggestions.
+      </p>
+      <div className="flex flex-col gap-2 w-full max-w-[200px]">
+        <Button
+          variant="default"
+          size="sm"
+          onClick={handleOpenChat}
+          className="w-full gap-2"
+        >
+          <MessageSquare className="h-4 w-4" />
+          Open Chat & Run /plan
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleOpenSuggestions}
+          className="w-full gap-2"
+        >
+          <Sparkles className="h-4 w-4" />
+          View Suggestions
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground/60 mt-4">
+        Tip: Type <code className="px-1 py-0.5 bg-foreground/5 rounded text-[11px]">/plan</code> in the chat to generate tasks from your epic description.
+      </p>
+    </div>
+  )
 }
 
 /** Extract size tag from title (e.g., "[S]", "[M]", "[L]", "[XL]") */
@@ -155,11 +210,11 @@ export function ListView({
     )
   }
 
-  // Empty state
+  // Empty state - show actionable guidance
   if (tasks.length === 0) {
     return (
-      <div className={cn('flex items-center justify-center h-full', className)}>
-        <span className="text-sm text-muted-foreground">No tasks in this epic</span>
+      <div className={cn('h-full', className)}>
+        <EmptyTasksState />
       </div>
     )
   }

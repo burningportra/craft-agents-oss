@@ -22,11 +22,12 @@ import {
   Plus,
   Trash2,
   ExternalLink,
+  PanelLeftClose,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getDocUrl, type DocFeature } from '@craft-agent/shared/docs/doc-links'
 
-export type SidebarMenuType = 'allChats' | 'flagged' | 'status' | 'sources' | 'skills' | 'labels' | 'views' | 'newChat'
+export type SidebarMenuType = 'allChats' | 'flagged' | 'status' | 'sources' | 'skills' | 'labels' | 'views' | 'newChat' | 'tasks'
 
 export interface SidebarMenuProps {
   /** Type of sidebar item (determines available menu items) */
@@ -55,6 +56,10 @@ export interface SidebarMenuProps {
   viewId?: string
   /** Handler for "Delete View" action */
   onDeleteView?: (id: string) => void
+  /** Handler for "Create Epic" action - for tasks type */
+  onCreateEpic?: () => void
+  /** Handler for "Close Panel" action - for tasks type */
+  onClosePanel?: () => void
 }
 
 /**
@@ -75,6 +80,8 @@ export function SidebarMenu({
   onConfigureViews,
   viewId,
   onDeleteView,
+  onCreateEpic,
+  onClosePanel,
 }: SidebarMenuProps) {
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem, Separator } = useMenuComponents()
@@ -193,6 +200,29 @@ export function SidebarMenu({
         <Plus className="h-3.5 w-3.5" />
         <span className="flex-1">Add Skill</span>
       </MenuItem>
+    )
+  }
+
+  // Tasks: show "Create Epic" and "Close Panel"
+  if (type === 'tasks') {
+    return (
+      <>
+        {onCreateEpic && (
+          <MenuItem onClick={onCreateEpic}>
+            <Plus className="h-3.5 w-3.5" />
+            <span className="flex-1">Create Epic</span>
+          </MenuItem>
+        )}
+        {onClosePanel && (
+          <>
+            {onCreateEpic && <Separator />}
+            <MenuItem onClick={onClosePanel}>
+              <PanelLeftClose className="h-3.5 w-3.5" />
+              <span className="flex-1">Close Panel</span>
+            </MenuItem>
+          </>
+        )}
+      </>
     )
   }
 

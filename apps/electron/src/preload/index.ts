@@ -498,6 +498,13 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.FLOW_TASK_UPDATE_STATUS, workspaceRoot, taskId, status),
   flowInit: (workspaceRoot: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.FLOW_INIT, workspaceRoot),
+  // Epic management
+  flowEpicCreate: (workspaceRoot: string, title: string, branch?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPIC_CREATE, workspaceRoot, title, branch),
+  flowEpicSetPlan: (workspaceRoot: string, epicId: string, content: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPIC_SET_PLAN, workspaceRoot, epicId, content),
+  flowEpicDelete: (workspaceRoot: string, epicId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPIC_DELETE, workspaceRoot, epicId),
   onFlowChanged: (callback: (workspaceRoot: string, payload: { type: 'epic' | 'task' | 'config'; id?: string }) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, workspaceRoot: string, payload: { type: 'epic' | 'task' | 'config'; id?: string }) => {
       callback(workspaceRoot, payload)

@@ -41,6 +41,10 @@ export interface SidebarContextMenuConfig {
   viewId?: string
   /** Handler for "Delete View" action */
   onDeleteView?: (id: string) => void
+  /** Handler for "Create Epic" action - for tasks type */
+  onCreateEpic?: () => void
+  /** Handler for "Close Panel" action - for tasks type */
+  onClosePanel?: () => void
 }
 
 /**
@@ -242,6 +246,8 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
                         onConfigureViews={link.contextMenu.onConfigureViews}
                         viewId={link.contextMenu.viewId}
                         onDeleteView={link.contextMenu.onDeleteView}
+                        onCreateEpic={link.contextMenu.onCreateEpic}
+                        onClosePanel={link.contextMenu.onClosePanel}
                       />
                     </ContextMenuProvider>
                   </StyledContextMenuContent>
@@ -389,6 +395,8 @@ function SortableStatusList({ items, onReorder, getItemProps, focusedItemId }: S
                         onConfigureViews={item.contextMenu.onConfigureViews}
                         viewId={item.contextMenu.viewId}
                         onDeleteView={item.contextMenu.onDeleteView}
+                        onCreateEpic={item.contextMenu.onCreateEpic}
+                        onClosePanel={item.contextMenu.onClosePanel}
                       />
                     </ContextMenuProvider>
                   </StyledContextMenuContent>

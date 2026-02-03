@@ -771,6 +771,10 @@ export const IPC_CHANNELS = {
   FLOW_TASK_UPDATE_STATUS: 'flow:task-update-status',
   FLOW_INIT: 'flow:init',
   FLOW_CHANGED: 'flow:changed',
+  // Flow epic management
+  FLOW_EPIC_CREATE: 'flow:epic-create',
+  FLOW_EPIC_SET_PLAN: 'flow:epic-set-plan',
+  FLOW_EPIC_DELETE: 'flow:epic-delete',
   // Flow notifications
   FLOW_NOTIFICATION_NAVIGATE: 'flow:notification-navigate',
   FLOW_SHOW_NOTIFICATION: 'flow:show-notification',
@@ -1072,6 +1076,10 @@ export interface ElectronAPI {
   flowTaskStart(workspaceRoot: string, taskId: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').CommandSuccess>>
   flowTaskUpdateStatus(workspaceRoot: string, taskId: string, status: import('./flow-schemas').TaskStatus): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').CommandSuccess>>
   flowInit(workspaceRoot: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').CommandSuccess>>
+  // Epic management
+  flowEpicCreate(workspaceRoot: string, title: string, branch?: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').EpicCreateResponse>>
+  flowEpicSetPlan(workspaceRoot: string, epicId: string, content: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').EpicSetPlanResponse>>
+  flowEpicDelete(workspaceRoot: string, epicId: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').CommandSuccess>>
   onFlowChanged(callback: (workspaceRoot: string, payload: { type: 'epic' | 'task' | 'config'; id?: string }) => void): () => void
 
   // Flow notifications

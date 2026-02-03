@@ -110,6 +110,27 @@ export type Epic = z.infer<typeof EpicSchema>
 export const CommandSuccessSchema = z.object({ success: z.boolean() })
 export type CommandSuccess = z.infer<typeof CommandSuccessSchema>
 
+// ─── Epic Creation Response (from `flowctl epic create --json`) ────────
+
+export const EpicCreateResponseSchema = z.object({
+  success: z.boolean(),
+  id: z.string(),           // e.g., "fn-3-user-authentication"
+  title: z.string(),
+  spec_path: z.string(),    // e.g., ".flow/specs/fn-3-user-authentication.md"
+  message: z.string().optional(),
+})
+export type EpicCreateResponse = z.infer<typeof EpicCreateResponseSchema>
+
+// ─── Epic Set-Plan Response (from `flowctl epic set-plan --json`) ────────
+
+export const EpicSetPlanResponseSchema = z.object({
+  success: z.boolean(),
+  id: z.string(),
+  spec_path: z.string(),
+  message: z.string().optional(),
+})
+export type EpicSetPlanResponse = z.infer<typeof EpicSetPlanResponseSchema>
+
 // ─── FlowBridge Error Types ──────────────────────────────────────────
 
 export type FlowBridgeError =

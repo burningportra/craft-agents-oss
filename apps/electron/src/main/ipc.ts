@@ -2613,6 +2613,21 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return getFlowBridge(workspaceRoot).init()
   })
 
+  // Epic creation
+  ipcMain.handle(IPC_CHANNELS.FLOW_EPIC_CREATE, (_event, workspaceRoot: string, title: string, branch?: string) => {
+    return getFlowBridge(workspaceRoot).createEpic(title, branch)
+  })
+
+  // Epic plan update (for Standard/Complex templates with full spec)
+  ipcMain.handle(IPC_CHANNELS.FLOW_EPIC_SET_PLAN, (_event, workspaceRoot: string, epicId: string, content: string) => {
+    return getFlowBridge(workspaceRoot).setEpicPlan(epicId, content)
+  })
+
+  // Epic deletion
+  ipcMain.handle(IPC_CHANNELS.FLOW_EPIC_DELETE, (_event, workspaceRoot: string, epicId: string) => {
+    return getFlowBridge(workspaceRoot).deleteEpic(epicId)
+  })
+
   // Flow notifications
   ipcMain.handle(IPC_CHANNELS.FLOW_SHOW_NOTIFICATION, (_event, params: {
     type: string

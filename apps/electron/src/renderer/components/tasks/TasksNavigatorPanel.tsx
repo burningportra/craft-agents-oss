@@ -14,7 +14,17 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { EpicListItem } from './EpicListItem'
 import { TasksEmptyState } from './TasksEmptyState'
 import {
@@ -27,6 +37,7 @@ import {
   initFlowAtom,
   resetTasksStateAtom,
   openEpicTabAtom,
+  closeEpicTabAtom,
 } from '@/atoms/tasks-state'
 import { cn } from '@/lib/utils'
 
@@ -53,9 +64,15 @@ export function TasksNavigatorPanel({
   const initFlow = useSetAtom(initFlowAtom)
   const resetTasksState = useSetAtom(resetTasksStateAtom)
   const openEpicTab = useSetAtom(openEpicTabAtom)
+  const closeEpicTab = useSetAtom(closeEpicTabAtom)
 
   // Track whether we're initializing (for button disabled state)
   const [isInitializing, setIsInitializing] = React.useState(false)
+
+  // Delete confirmation dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
+  const [epicToDelete, setEpicToDelete] = React.useState<{ id: string; title: string } | null>(null)
+  const [isDeleting, setIsDeleting] = React.useState(false)
 
   // Load epics on mount and workspace change
   React.useEffect(() => {
@@ -102,6 +119,46 @@ export function TasksNavigatorPanel({
     onEpicSelect(epicId)
   }, [openEpicTab, onEpicSelect])
 
+  // Handle delete click from context menu
+  const handleDeleteClick = React.useCallback((epicId: string) => {
+    const epic = epics.find(e => e.id === epicId)
+    if (epic) {
+      setEpicToDelete({ id: epicId, title: epic.title })
+      setDeleteDialogOpen(true)
+    }
+  }, [epics])
+
+  // Confirm delete epic
+  const handleConfirmDelete = React.useCallback(async () => {
+    if (!epicToDelete || !workspaceRoot) return
+
+    setIsDeleting(true)
+    try {
+      const result = await window.electronAPI.flowEpicDelete(workspaceRoot, epicToDelete.id)
+      if (result.ok) {
+        toast.success('Epic deleted', {
+          description: `Deleted "${epicToDelete.title}"`,
+        })
+        // Close the tab for the deleted epic
+        closeEpicTab(epicToDelete.id)
+        // Reload epics list
+        loadEpics(workspaceRoot)
+      } else {
+        toast.error('Failed to delete epic', {
+          description: result.error.type === 'command_failed' ? result.error.stderr : 'Unknown error',
+        })
+      }
+    } catch (err) {
+      toast.error('Failed to delete epic', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      })
+    } finally {
+      setIsDeleting(false)
+      setDeleteDialogOpen(false)
+      setEpicToDelete(null)
+    }
+  }, [epicToDelete, workspaceRoot, closeEpicTab, loadEpics])
+
   // Loading state
   if (loadingState === 'loading' && epics.length === 0) {
     return (
@@ -135,10 +192,39 @@ export function TasksNavigatorPanel({
               epic={epic}
               isSelected={activeTab === epic.id || selectedEpicId === epic.id}
               onClick={() => handleEpicClick(epic.id)}
+              onDelete={handleDeleteClick}
             />
           ))}
         </div>
       </ScrollArea>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Epic</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{epicToDelete?.title}"? This will also delete all tasks in this epic. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

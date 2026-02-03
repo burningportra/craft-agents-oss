@@ -1990,6 +1990,11 @@ function AppShellContent({
                       icon: KanbanSquare,
                       variant: isTasksNavigation(navState) ? "default" : "ghost",
                       onClick: handleTasksClick,
+                      contextMenu: {
+                        type: 'tasks',
+                        onCreateEpic: () => setEpicWizardOpen(true),
+                        onClosePanel: handleAllChatsClick,
+                      },
                     },
                     // --- Separator ---
                     { id: "separator:tasks-chats", type: "separator" },
