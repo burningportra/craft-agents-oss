@@ -463,6 +463,8 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.FLOW_TASK_SHOW, workspaceRoot, taskId),
   flowTaskStart: (workspaceRoot: string, taskId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.FLOW_TASK_START, workspaceRoot, taskId),
+  flowTaskUpdateStatus: (workspaceRoot: string, taskId: string, status: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_TASK_UPDATE_STATUS, workspaceRoot, taskId, status),
   flowInit: (workspaceRoot: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.FLOW_INIT, workspaceRoot),
   onFlowChanged: (callback: (workspaceRoot: string, payload: { type: 'epic' | 'task' | 'config'; id?: string }) => void) => {

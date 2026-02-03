@@ -12,6 +12,7 @@ import {
   type Epic,
   type TaskListResponse,
   type Task,
+  type TaskStatus,
   type FlowBridgeError,
   type FlowBridgeResult,
 } from '../../shared/flow-schemas'
@@ -160,6 +161,45 @@ export class FlowBridge {
   /** Start a task (claim it). Only status transition supported by flowctl directly. */
   startTask(taskId: string): Promise<FlowBridgeResult<CommandSuccess>> {
     return this.execWrite(['start', taskId], CommandSuccessSchema)
+  }
+
+  /**
+   * Update task status.
+   * Maps to flowctl commands:
+   * - todo: `flowctl task reset <taskId>`
+   * - in_progress: `flowctl start <taskId>`
+   * - blocked: Not directly supported (needs reason file) - returns error
+   * - done: `flowctl done <taskId> --summary "Status changed via GUI" --force`
+   */
+  updateTaskStatus(taskId: string, status: TaskStatus): Promise<FlowBridgeResult<CommandSuccess>> {
+    switch (status) {
+      case 'todo':
+        return this.execWrite(['task', 'reset', taskId], CommandSuccessSchema)
+      case 'in_progress':
+        return this.execWrite(['start', taskId], CommandSuccessSchema)
+      case 'done':
+        // Use --force to skip checks, --summary for required summary
+        return this.execWrite(['done', taskId, '--summary', 'Status changed via GUI', '--force'], CommandSuccessSchema)
+      case 'blocked':
+        // Blocking requires a reason file - not supported via simple drag-drop
+        return Promise.resolve({
+          ok: false,
+          error: {
+            type: 'command_failed',
+            stderr: 'Blocking a task requires a reason. Use the task detail panel instead.',
+            exitCode: 1,
+          },
+        })
+      default:
+        return Promise.resolve({
+          ok: false,
+          error: {
+            type: 'command_failed',
+            stderr: `Unknown status: ${status}`,
+            exitCode: 1,
+          },
+        })
+    }
   }
 
   /** Initialize flow-next in workspace */

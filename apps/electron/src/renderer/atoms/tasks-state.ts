@@ -8,7 +8,7 @@
 import { atom } from 'jotai'
 import { atomWithStorage } from 'jotai/utils'
 import { atomFamily } from 'jotai-family'
-import type { EpicSummary, TaskSummary, FlowBridgeResult, EpicListResponse, TaskListResponse } from '../../shared/flow-schemas'
+import type { EpicSummary, TaskSummary, TaskStatus, FlowBridgeResult, EpicListResponse, TaskListResponse, CommandSuccess } from '../../shared/flow-schemas'
 
 // ─── Utils ───────────────────────────────────────────────────────────────────
 
@@ -228,5 +228,82 @@ export const resetTasksStateAtom = atom(
     set(epicsErrorAtom, null)
     // Clear selection on workspace change to prevent cross-workspace selection bugs
     set(selectedEpicIdAtom, null)
+  }
+)
+
+/**
+ * Action atom: Update task status via drag-drop
+ * Performs optimistic update with rollback on failure.
+ * Shows sonner toast on error.
+ */
+export const updateTaskStatusAtom = atom(
+  null,
+  async (get, set, workspaceRoot: string, taskId: string, newStatus: TaskStatus) => {
+    // Find the task's epic to update the correct atom
+    // Task ID format: epicId.taskNumber (e.g., "fn-1.2")
+    const epicId = taskId.split('.').slice(0, -1).join('.')
+
+    const tasksAtom = tasksAtomFamily(epicId)
+    const currentTasks = get(tasksAtom)
+    const taskIndex = currentTasks.findIndex((t) => t.id === taskId)
+
+    if (taskIndex === -1) {
+      console.error('[updateTaskStatusAtom] Task not found:', taskId)
+      return
+    }
+
+    const originalTask = currentTasks[taskIndex]
+    const originalStatus = originalTask.status
+
+    // Optimistic update
+    const updatedTasks = [...currentTasks]
+    updatedTasks[taskIndex] = { ...originalTask, status: newStatus }
+    set(tasksAtom, updatedTasks)
+
+    try {
+      const result: FlowBridgeResult<CommandSuccess> = await window.electronAPI.flowTaskUpdateStatus(
+        workspaceRoot,
+        taskId,
+        newStatus
+      )
+
+      if (!result.ok) {
+        // Rollback on failure
+        const rollbackTasks = [...get(tasksAtom)]
+        const rollbackIndex = rollbackTasks.findIndex((t) => t.id === taskId)
+        if (rollbackIndex !== -1) {
+          rollbackTasks[rollbackIndex] = { ...rollbackTasks[rollbackIndex], status: originalStatus }
+          set(tasksAtom, rollbackTasks)
+        }
+
+        // Show error toast
+        const errorMsg =
+          result.error.type === 'command_failed'
+            ? result.error.stderr || 'Command failed'
+            : result.error.type === 'flowctl_not_found'
+              ? 'flowctl not found'
+              : 'Failed to update task status'
+
+        // Import toast dynamically to avoid circular dependency
+        const { toast } = await import('sonner')
+        toast.error('Failed to update task status', {
+          description: errorMsg,
+        })
+      }
+    } catch (err) {
+      // Rollback on error
+      const rollbackTasks = [...get(tasksAtom)]
+      const rollbackIndex = rollbackTasks.findIndex((t) => t.id === taskId)
+      if (rollbackIndex !== -1) {
+        rollbackTasks[rollbackIndex] = { ...rollbackTasks[rollbackIndex], status: originalStatus }
+        set(tasksAtom, rollbackTasks)
+      }
+
+      // Show error toast
+      const { toast } = await import('sonner')
+      toast.error('Failed to update task status', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      })
+    }
   }
 )

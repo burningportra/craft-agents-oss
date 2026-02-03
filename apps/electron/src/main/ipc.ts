@@ -2552,6 +2552,10 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return getFlowBridge(workspaceRoot).startTask(taskId)
   })
 
+  ipcMain.handle(IPC_CHANNELS.FLOW_TASK_UPDATE_STATUS, (_event, workspaceRoot: string, taskId: string, status: string) => {
+    return getFlowBridge(workspaceRoot).updateTaskStatus(taskId, status as import('../shared/flow-schemas').TaskStatus)
+  })
+
   ipcMain.handle(IPC_CHANNELS.FLOW_INIT, (_event, workspaceRoot: string) => {
     return getFlowBridge(workspaceRoot).init()
   })

@@ -35,8 +35,7 @@ Build the Tasks navigator panel (left panel when Tasks nav is active): epic list
 - [ ] Selected epic persists across sessions via atomWithStorage
 - [ ] Loading state shown while fetching epics
 ## Done summary
-TBD
-
+- Task completed
 ## Evidence
 - Commits:
 - Tests:

@@ -48,9 +48,8 @@ Implement FlowWatcher class that monitors `.flow/` directory for changes and emi
 - [ ] Handles .flow/ being deleted while watching (graceful cleanup)
 - [ ] Renderer can subscribe to FLOW_CHANGED events via preload API
 ## Done summary
-TBD
-
+Implemented FlowWatcher class that monitors .flow/ directory recursively with per-file-path debouncing (100ms), parses changed files into typed FlowChangedPayload (epic/task/config with ID), and broadcasts FLOW_CHANGED IPC events to all windows. Handles .flow/ not existing (watches parent for creation) and deletion mid-watch with graceful fallback.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 8c2940d, 6a999cc
+- Tests: bun typecheck (pre-existing errors in packages/shared, new code compiles clean)
 - PRs:
