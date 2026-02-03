@@ -1360,10 +1360,9 @@ function AppShellContent({
 
     return (
       <HeaderIconButton
-        icon={<PanelLeftRounded className="h-5 w-6" />}
+        icon={<PanelLeftRounded className="h-5 w-6 text-neutral-700 dark:text-neutral-300" />}
         onClick={() => setIsRightSidebarVisible(false)}
         tooltip="Close sidebar"
-        className="text-foreground"
       />
     )
   }, [isFocusedMode, isRightSidebarVisible])
@@ -2822,7 +2821,7 @@ function AppShellContent({
                   )}
                   {/* Collapse navigator panel button */}
                   <HeaderIconButton
-                    icon={<PanelLeftRounded className="h-5 w-6" />}
+                    icon={<PanelLeftRounded className="h-5 w-6 text-neutral-700 dark:text-neutral-300" />}
                     onClick={() => setIsNavigatorVisible(false)}
                     tooltip="Close panel"
                   />
@@ -2831,7 +2830,7 @@ function AppShellContent({
                     <EditPopover
                       trigger={
                         <HeaderIconButton
-                          icon={<Plus className="h-4 w-4" />}
+                          icon={<Plus className="h-4 w-4 text-neutral-700 dark:text-neutral-300" />}
                           tooltip="Add Skill"
                           data-tutorial="add-skill-button"
                         />
@@ -2842,7 +2841,7 @@ function AppShellContent({
                   {/* Add Epic button (only for tasks mode) */}
                   {isTasksNavigation(navState) && (
                     <HeaderIconButton
-                      icon={<Plus className="h-4 w-4" />}
+                      icon={<Plus className="h-4 w-4 text-neutral-700 dark:text-neutral-300" />}
                       tooltip="Create Epic"
                       onClick={() => setEpicWizardOpen(true)}
                     />
