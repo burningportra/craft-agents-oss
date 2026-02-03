@@ -250,7 +250,7 @@ export function EpicTabBar({ onAddTab, className }: EpicTabBarProps) {
           onClick={onAddTab}
           data-tutorial="create-epic-button"
         >
-          <Plus className="h-4 w-4 text-neutral-700 dark:text-neutral-300" />
+          <Plus className="h-4 w-4" style={{ color: 'var(--foreground)' }} />
         </Button>
       )}
     </div>
