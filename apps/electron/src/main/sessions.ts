@@ -4,7 +4,8 @@ import { join } from 'path'
 import { existsSync } from 'fs'
 import { rm, readFile } from 'fs/promises'
 import { CraftAgent, type AgentEvent, setPermissionMode, type PermissionMode, unregisterSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest } from '@craft-agent/shared/agent'
-import { extractLearningsFromMessages, appendLearnings } from '@craft-agent/shared/agent/learnings'
+import { extractLearningsFromMessages, appendLearnings, extractLearningsFromHandoff } from '@craft-agent/shared/agent/learnings'
+import { appendRelationships, extractRelationshipsFromHandoff } from '@craft-agent/shared/agent/relationships'
 import { sessionLog, isDebugMode, getLogFilePath } from './logger'
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import type { WindowManager } from './window-manager'
@@ -1688,6 +1689,24 @@ export class SessionManager {
         if (learnings.length > 0) {
           appendLearnings(managed.workspace.rootPath, learnings)
           sessionLog.info(`Extracted ${learnings.length} learnings for session ${managed.id}`)
+        }
+
+        // Extract learnings and relationships from handoff reviews
+        const handoffMessages = messages.filter(m => m.role === 'handoff-review')
+        for (const msg of handoffMessages) {
+          if (msg.handoffPayload) {
+            const handoffLearnings = extractLearningsFromHandoff(msg.handoffPayload)
+            if (handoffLearnings.length > 0) {
+              appendLearnings(managed.workspace.rootPath, handoffLearnings)
+              sessionLog.info(`Extracted ${handoffLearnings.length} handoff learnings for session ${managed.id}`)
+            }
+
+            const relationships = extractRelationshipsFromHandoff(msg.handoffPayload, managed.id)
+            if (relationships.length > 0) {
+              appendRelationships(managed.workspace.rootPath, relationships)
+              sessionLog.info(`Extracted ${relationships.length} relationships for session ${managed.id}`)
+            }
+          }
         }
       }
 

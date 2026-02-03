@@ -8,6 +8,7 @@ import { APP_VERSION } from '../version/index.ts';
 import { globSync } from 'glob';
 import os from 'os';
 import { readLearnings, distillLearnings } from '../agent/learnings.ts';
+import { readRelationships, type Relationship } from '../agent/relationships.ts';
 
 /** Maximum size of CLAUDE.md file to include (10KB) */
 const MAX_CONTEXT_FILE_SIZE = 10 * 1024;
@@ -330,11 +331,14 @@ export function getSystemPrompt(
     ? `\n\n## Workspace Learnings\n\nPatterns observed from previous sessions in this workspace:\n\n${distilled}\n`
     : '';
 
+  // Get relationships context — decision→file and file→risk links from handoff reviews
+  const relationshipsContext = workspaceRootPath ? buildRelationshipsContext(workspaceRootPath) : '';
+
   // Note: Date/time context is now added to user messages instead of system prompt
   // to enable prompt caching. The system prompt stays static and cacheable.
   // Safe Mode context is also in user messages for the same reason.
   const basePrompt = getCraftAssistantPrompt(workspaceRootPath);
-  const fullPrompt = `${basePrompt}${preferences}${debugContext}${projectContextFiles}${learningsContext}`;
+  const fullPrompt = `${basePrompt}${preferences}${debugContext}${projectContextFiles}${learningsContext}${relationshipsContext}`;
 
   debug('[getSystemPrompt] full prompt length:', fullPrompt.length);
 
@@ -386,6 +390,46 @@ Grep pattern="." path="${logFilePath}" head_limit=50
 
 **Tip:** Use \`-C 2\` for context around matches when debugging issues.
 `;
+}
+
+/**
+ * Build relationships context for system prompt.
+ * Shows recent decision→file and file→risk links from handoff reviews.
+ */
+function buildRelationshipsContext(workspaceRootPath: string): string {
+  const relationships = readRelationships(workspaceRootPath);
+  if (relationships.length === 0) return '';
+
+  // Get last 20 relationships (most recent)
+  const recent = relationships.slice(-20);
+
+  // Group by type
+  const byType = {
+    decision_file: recent.filter(r => r.type === 'decision_file'),
+    file_risk: recent.filter(r => r.type === 'file_risk'),
+  };
+
+  const sections: string[] = [];
+
+  if (byType.decision_file.length > 0) {
+    sections.push('### Decisions → Files\n' +
+      byType.decision_file.map(r =>
+        `- \`${r.target}\` — ${r.label || 'Related to decision'}`
+      ).join('\n')
+    );
+  }
+
+  if (byType.file_risk.length > 0) {
+    sections.push('### Files → Risks\n' +
+      byType.file_risk.map(r =>
+        `- \`${r.source}\` has risk: ${r.label || r.target}`
+      ).join('\n')
+    );
+  }
+
+  if (sections.length === 0) return '';
+
+  return `\n\n## Known Relationships\n\n${sections.join('\n\n')}\n`;
 }
 
 /**

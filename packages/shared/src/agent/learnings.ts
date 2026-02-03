@@ -96,6 +96,8 @@ export function distillLearnings(workspaceRootPath: string): string {
   if (lines.length === 0) return '';
 
   const fixes: string[] = [];
+  const decisions: string[] = [];
+  const risks: string[] = [];
   const fileGroups = new Map<string, number>();
 
   for (const line of lines) {
@@ -104,10 +106,21 @@ export function distillLearnings(workspaceRootPath: string): string {
 
     if (content.startsWith('Fixed:')) {
       fixes.push(content.replace('Fixed: ', '').trim());
+    } else if (content.startsWith('Decision')) {
+      decisions.push(content);
+    } else if (content.startsWith('Risk')) {
+      risks.push(content);
     } else if (content.startsWith('Modified files:')) {
       const files = content.replace('Modified files: ', '').split(', ');
       for (const f of files) {
         fileGroups.set(f.trim(), (fileGroups.get(f.trim()) || 0) + 1);
+      }
+    } else if (content.startsWith('Scope:')) {
+      // Extract file path from "Scope: path — reason"
+      const scopeMatch = content.match(/^Scope:\s*(.+?)\s*—/);
+      if (scopeMatch && scopeMatch[1]) {
+        const file = scopeMatch[1].trim();
+        fileGroups.set(file, (fileGroups.get(file) || 0) + 1);
       }
     }
   }
@@ -132,6 +145,20 @@ export function distillLearnings(workspaceRootPath: string): string {
       unique.map(f => `- ${f}`).join('\n'));
   }
 
+  // Key decisions
+  if (decisions.length > 0) {
+    const unique = [...new Set(decisions)].slice(0, 10);
+    sections.push('### Key Decisions\n' +
+      unique.map(d => `- ${d}`).join('\n'));
+  }
+
+  // Known risks
+  if (risks.length > 0) {
+    const unique = [...new Set(risks)].slice(0, 10);
+    sections.push('### Known Risks\n' +
+      unique.map(r => `- ${r}`).join('\n'));
+  }
+
   return sections.join('\n\n');
 }
 
@@ -147,6 +174,39 @@ export function distillLearnings(workspaceRootPath: string): string {
  * - Key decisions mentioned in assistant text
  * - Errors encountered and fixed
  */
+/**
+ * Extract learnings from handoff review payloads.
+ * Converts decisions/files/risks into structured learning entries.
+ */
+export function extractLearningsFromHandoff(
+  handoffPayload: {
+    decisions?: Array<{ id: string; content: string; confidence: 'high' | 'medium' | 'low' }>;
+    files?: Array<{ path: string; reason: string }>;
+    risks?: Array<{ category: string; description: string; mitigation: string }>;
+  }
+): string[] {
+  const learnings: string[] = [];
+
+  // Extract high/medium confidence decisions (skip low confidence)
+  for (const decision of handoffPayload.decisions || []) {
+    if (decision.confidence !== 'low') {
+      learnings.push(`Decision (${decision.confidence}): ${decision.content}`);
+    }
+  }
+
+  // Extract file scopes with reasons
+  for (const file of handoffPayload.files || []) {
+    learnings.push(`Scope: ${file.path} — ${file.reason}`);
+  }
+
+  // Extract risks with mitigations
+  for (const risk of handoffPayload.risks || []) {
+    learnings.push(`Risk (${risk.category}): ${risk.mitigation}`);
+  }
+
+  return learnings;
+}
+
 export function extractLearningsFromMessages(messages: any[]): string[] {
   const learnings: string[] = [];
 
