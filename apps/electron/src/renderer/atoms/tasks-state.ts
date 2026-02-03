@@ -402,6 +402,36 @@ export function getEffectiveViewMode(
   return suggestViewMode(tasks)
 }
 
+// ─── Graph Viewport State ─────────────────────────────────────────────────────
+
+/**
+ * Viewport state for dependency graph (zoom, pan position)
+ * Matches React Flow's Viewport type
+ */
+export interface GraphViewport {
+  x: number
+  y: number
+  zoom: number
+}
+
+/**
+ * Viewport state per epic for the dependency graph
+ * Persists zoom/pan position when switching between views/tabs
+ */
+export const graphViewportPerEpicAtomFamily = atomFamily(
+  (_epicId: string) => atom<GraphViewport | null>(null),
+  (a, b) => a === b
+)
+
+/**
+ * Track whether initial fitView has been applied for each epic
+ * Prevents fitView from running on every re-render
+ */
+export const graphInitializedPerEpicAtomFamily = atomFamily(
+  (_epicId: string) => atom<boolean>(false),
+  (a, b) => a === b
+)
+
 /**
  * Action atom: Update task status via drag-drop
  * Performs optimistic update with rollback on failure.

@@ -23,6 +23,7 @@ import { EpicTabBar } from './EpicTabBar'
 import { ViewModeSelector } from './ViewModeSelector'
 import { ListView } from './ListView'
 import { KanbanBoard } from './KanbanBoard'
+import { DependencyGraph } from './DependencyGraph'
 import { TaskDetailSlideOver } from './TaskDetailSlideOver'
 import {
   openTabsAtom,
@@ -100,10 +101,12 @@ function EpicViewContainer({
         />
       )}
       {viewMode === 'graph' && (
-        // Placeholder for dependency graph (task 8)
-        <div className="flex items-center justify-center h-full text-muted-foreground">
-          <p className="text-sm">Dependency graph view coming soon</p>
-        </div>
+        <DependencyGraph
+          epicId={epicId}
+          workspaceRoot={workspaceRoot}
+          onTaskClick={onTaskClick}
+          className="h-full"
+        />
       )}
     </div>
   )
