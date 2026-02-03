@@ -109,6 +109,7 @@ import {
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
+import { TasksNavigatorPanel } from "../tasks/TasksNavigatorPanel"
 import { PanelHeader } from "./PanelHeader"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
 import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
@@ -2839,6 +2840,16 @@ function AppShellContent({
                 onSkillClick={handleSkillSelect}
                 onDeleteSkill={handleDeleteSkill}
                 selectedSkillSlug={isSkillsNavigation(navState) && navState.details?.type === 'skill' ? navState.details.skillSlug : null}
+              />
+            )}
+            {isTasksNavigation(navState) && (
+              /* Tasks Navigator - Epic list with progress */
+              <TasksNavigatorPanel
+                workspaceRoot={activeWorkspace?.rootPath}
+                onEpicSelect={(epicId) => {
+                  // Navigate to epic detail view (updates navigation state)
+                  navigate(routes.view.epicDetail(epicId))
+                }}
               />
             )}
             {isSettingsNavigation(navState) && (
