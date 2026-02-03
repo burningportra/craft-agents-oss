@@ -1,9 +1,19 @@
 
-
-# Craft Agents
+# Craft Agents (Fork)
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
+
+> **Fork of [lukilabs/craft-agents-oss](https://github.com/lukilabs/craft-agents-oss)** with additional features including an integrated Tasks GUI for Flow-Next workflow management.
+
+## What's New in This Fork
+
+- **Tasks GUI** — Visual task management interface integrated directly into the sidebar
+  - Epic and task listing with status indicators
+  - Dependency graph visualization (dagre-based auto-layout)
+  - Task detail slide-over panels
+  - Real-time updates via IPC events
+  - Seamless integration with [Flow-Next](https://github.com/gmickel/claude-marketplace) planning workflows
 
 ## How it Works (Video)
 To understand what Craft Agents does and how it works watch this video.
@@ -77,14 +87,19 @@ irm https://agents.craft.do/install-app.ps1 | iex
 ### Build from Source
 
 ```bash
-git clone https://github.com/lukilabs/craft-agents-oss.git
+# This fork (with Tasks GUI)
+git clone https://github.com/kevtrinh/craft-agents-oss.git
 cd craft-agents-oss
 bun install
 bun run electron:start
+
+# Or the original upstream
+# git clone https://github.com/lukilabs/craft-agents-oss.git
 ```
 
 ## Features
 
+- **Tasks GUI** *(Fork addition)*: Visual Flow-Next task management with epic lists, dependency graphs, and real-time status updates
 - **Multi-Session Inbox**: Desktop app with session management, status workflow, and flagging
 - **Claude Code Experience**: Streaming responses, tool visualization, real-time updates
 - **Craft MCP Integration**: Access to 32+ Craft document tools (blocks, collections, search, tasks)
