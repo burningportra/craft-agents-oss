@@ -2498,13 +2498,18 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
    */
   function ensureFlowWatcher(workspaceRoot: string): void {
     if (flowWatcherCache.has(workspaceRoot)) return
-    const { FlowWatcher } = require('./lib/flow-watcher') as typeof import('./lib/flow-watcher')
-    const watcher = new FlowWatcher(workspaceRoot, () => {
-      // Broadcast to all windows; renderer filters by workspaceRoot in the payload
-      return BrowserWindow.getAllWindows().filter(w => !w.isDestroyed())
-    })
-    watcher.start()
-    flowWatcherCache.set(workspaceRoot, watcher)
+    try {
+      const { FlowWatcher } = require('./lib/flow-watcher') as typeof import('./lib/flow-watcher')
+      const watcher = new FlowWatcher(workspaceRoot, () => {
+        // Broadcast to all windows; renderer filters by workspaceRoot in the payload
+        return BrowserWindow.getAllWindows().filter(w => !w.isDestroyed())
+      })
+      watcher.start()
+      flowWatcherCache.set(workspaceRoot, watcher)
+    } catch (err) {
+      console.error('[FlowWatcher] Failed to start watcher:', err)
+      // Don't cache - allow retry on next IPC call
+    }
   }
 
   /** Stop and remove a FlowWatcher for a workspace root */

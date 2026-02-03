@@ -13,7 +13,7 @@
  */
 
 import { watch, existsSync } from 'fs'
-import { join, relative } from 'path'
+import { join } from 'path'
 import type { FSWatcher } from 'fs'
 import type { BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '../../shared/types'
@@ -120,7 +120,8 @@ export class FlowWatcher {
 
     try {
       this.parentWatcher = watch(this.workspaceRoot, (eventType, filename) => {
-        if (filename === '.flow' && existsSync(this.flowDir)) {
+        // Guard against null filename (can happen on macOS for directory-level events)
+        if (filename && filename === '.flow' && existsSync(this.flowDir)) {
           this.closeParentWatcher()
           this.watchFlowDir()
           // Emit a config change to signal .flow/ was created
@@ -128,7 +129,8 @@ export class FlowWatcher {
         }
       })
 
-      this.parentWatcher.on('error', () => {
+      this.parentWatcher.on('error', (err) => {
+        console.error('[FlowWatcher] Parent watcher error:', err)
         this.closeParentWatcher()
       })
     } catch {
@@ -163,6 +165,7 @@ export class FlowWatcher {
     const dir = parts[0]
     const file = parts[1]
 
+    // Note: Task IDs contain dots (e.g., fn-1.2.md), so we only strip the final .json/.md extension
     if (dir === 'epics' && file) {
       const id = file.replace(/\.(json|md)$/, '')
       return { type: 'epic', id }
