@@ -13,7 +13,18 @@
   - Dependency graph visualization (dagre-based auto-layout)
   - Task detail slide-over panels
   - Real-time updates via IPC events
-  - Seamless integration with [Flow-Next](https://github.com/gmickel/claude-marketplace) planning workflows
+  - Seamless integration with Flow-Next planning workflows
+
+### Flow-Next Integration
+
+This fork is designed to work with [**Flow-Next**](https://github.com/gmickel/gmickel-claude-marketplace/tree/main/plugins/flow-next), a Claude Code plugin for structured task planning and execution. Flow-Next provides:
+
+- `/flow-next:plan` — Create structured build plans from feature requests
+- `/flow-next:work` — Execute plans systematically with quality checks
+- `/flow-next:impl-review` — John Carmack-level code reviews
+- `flowctl` CLI — Manage epics, tasks, and dependencies
+
+The Tasks GUI surfaces Flow-Next's `.flow/` directory data in a visual interface, letting you track progress without leaving the app. See the [Flow-Next README](https://github.com/gmickel/gmickel-claude-marketplace/tree/main/plugins/flow-next) for setup and usage.
 
 ## How it Works (Video)
 To understand what Craft Agents does and how it works watch this video.
