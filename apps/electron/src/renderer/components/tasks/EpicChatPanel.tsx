@@ -122,7 +122,7 @@ function MessageBubble({ message }: MessageBubbleProps) {
         {isUser ? (
           <p className="whitespace-pre-wrap break-words">{message.content}</p>
         ) : (
-          <Markdown content={message.content} />
+          <Markdown>{message.content}</Markdown>
         )}
         <p className="text-[10px] text-muted-foreground mt-1">
           {new Date(message.timestamp).toLocaleTimeString()}
