@@ -66,6 +66,7 @@ export default defineConfig({
       'pdfjs-dist',
       // Pre-bundle to avoid reload cycle on first load
       '@dagrejs/dagre',
+      '@dagrejs/dagre/dist/dagre.js',
       '@radix-ui/react-tooltip',
       'react-markdown',
       'rehype-raw',

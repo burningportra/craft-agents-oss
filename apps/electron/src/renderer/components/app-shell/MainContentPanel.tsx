@@ -27,7 +27,8 @@ import {
 } from '@/contexts/NavigationContext'
 import { AppSettingsPage, AppearanceSettingsPage, InputSettingsPage, WorkspaceSettingsPage, PermissionsSettingsPage, LabelsSettingsPage, PreferencesPage, ShortcutsPage, SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
-import { TasksPage } from '@/pages/TasksPage'
+// Lazy load TasksPage to avoid blocking app startup with heavy @xyflow/react import
+const TasksPage = React.lazy(() => import('@/pages/TasksPage').then(m => ({ default: m.TasksPage })))
 
 export interface MainContentPanelProps {
   /** Whether the app is in focused mode (single chat, no sidebar) */
@@ -149,11 +150,13 @@ export function MainContentPanel({
     )
   }
 
-  // Tasks navigator - show tasks page
+  // Tasks navigator - show tasks page (lazy loaded)
   if (isTasksNavigation(navState)) {
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <TasksPage />
+        <React.Suspense fallback={<div className="flex items-center justify-center h-full text-muted-foreground">Loading tasks...</div>}>
+          <TasksPage />
+        </React.Suspense>
       </Panel>
     )
   }
