@@ -29,3 +29,8 @@ export type { ViewMode } from '@/atoms/tasks-state'
 export type { EpicTemplate, WizardStep, EpicCreationWizardProps } from './EpicCreationWizard'
 export type { StandardEpicFormData, EpicComplexity } from './StandardInterviewStep'
 export type { ComplexEpicFormData } from './ComplexEpicStep'
+export type { QuickEpicFormData } from './QuickEpicStep'
+// Export Zod schemas for external validation
+export { quickEpicSchema } from './QuickEpicStep'
+export { standardEpicSchema, epicComplexitySchema } from './StandardInterviewStep'
+export { complexEpicSchema } from './ComplexEpicStep'

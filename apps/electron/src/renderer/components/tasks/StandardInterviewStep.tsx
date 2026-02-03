@@ -11,10 +11,16 @@
  * 4. Dependencies on other epics (optional dropdown)
  * 5. Estimated complexity (S/M/L selector)
  * 6. Technical notes / constraints
+ *
+ * Features:
+ * - Zod validation for form data
+ * - Full accessibility support
+ * - Keyboard navigation
  */
 
 import * as React from 'react'
-import { ClipboardList, Loader2 } from 'lucide-react'
+import { z } from 'zod'
+import { ClipboardList, Loader2, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -30,16 +36,38 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { EpicSummary } from '../../../shared/flow-schemas'
 
-export type EpicComplexity = 'S' | 'M' | 'L'
+// ─── Validation Schema ────────────────────────────────────────────────────────
 
-export interface StandardEpicFormData {
-  title: string
-  description: string
-  acceptanceCriteria: string
-  dependsOnEpic: string | null
-  complexity: EpicComplexity
-  technicalNotes: string
-}
+export const epicComplexitySchema = z.enum(['S', 'M', 'L'])
+export type EpicComplexity = z.infer<typeof epicComplexitySchema>
+
+export const standardEpicSchema = z.object({
+  title: z
+    .string()
+    .min(3, 'Title must be at least 3 characters')
+    .max(100, 'Title must be less than 100 characters'),
+  description: z
+    .string()
+    .max(2000, 'Description must be less than 2000 characters')
+    .optional()
+    .default(''),
+  acceptanceCriteria: z
+    .string()
+    .max(5000, 'Acceptance criteria must be less than 5000 characters')
+    .optional()
+    .default(''),
+  dependsOnEpic: z.string().nullable().optional().default(null),
+  complexity: epicComplexitySchema.default('M'),
+  technicalNotes: z
+    .string()
+    .max(2000, 'Technical notes must be less than 2000 characters')
+    .optional()
+    .default(''),
+})
+
+export type StandardEpicFormData = z.infer<typeof standardEpicSchema>
+
+// ─── Props ────────────────────────────────────────────────────────────────────
 
 export interface StandardInterviewStepProps {
   /** Available epics for dependency selection */
@@ -58,11 +86,15 @@ export interface StandardInterviewStepProps {
   className?: string
 }
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const COMPLEXITY_OPTIONS: { value: EpicComplexity; label: string; description: string }[] = [
   { value: 'S', label: 'Small', description: '1-3 tasks, few hours' },
   { value: 'M', label: 'Medium', description: '4-8 tasks, 1-3 days' },
   { value: 'L', label: 'Large', description: '9+ tasks, week+' },
 ]
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function StandardInterviewStep({
   epics,
@@ -81,8 +113,12 @@ export function StandardInterviewStep({
     complexity: 'M',
     technicalNotes: '',
   })
+  const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({})
 
   const titleInputRef = React.useRef<HTMLInputElement>(null)
+
+  // Combined error for display (server error takes precedence)
+  const displayError = error
 
   // Focus title input on mount
   React.useEffect(() => {
@@ -95,38 +131,81 @@ export function StandardInterviewStep({
     value: StandardEpicFormData[K]
   ) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
-    // Clear error when user starts typing
+    // Clear field error when user starts typing
+    if (fieldErrors[field]) {
+      setFieldErrors((prev) => {
+        const next = { ...prev }
+        delete next[field]
+        return next
+      })
+    }
+    // Clear server error
     if (error) {
       onClearError?.()
     }
   }
 
+  // Validate form
+  const validate = React.useCallback((): boolean => {
+    const result = standardEpicSchema.safeParse(formData)
+    if (!result.success) {
+      const errors: Record<string, string> = {}
+      for (const issue of result.error.issues) {
+        const field = issue.path[0]
+        if (typeof field === 'string' && !errors[field]) {
+          errors[field] = issue.message
+        }
+      }
+      setFieldErrors(errors)
+      return false
+    }
+    setFieldErrors({})
+    return true
+  }, [formData])
+
   // Handle form submit
   const handleSubmit = React.useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault()
-      if (!formData.title.trim() || isCreating) return
+      if (isCreating) return
+      if (!validate()) return
       await onCreate(formData)
     },
-    [formData, isCreating, onCreate]
+    [formData, isCreating, onCreate, validate]
   )
 
   // Filter out done epics for dependency selection
   const availableEpics = epics.filter((e) => e.status !== 'done')
 
+  // Field IDs for accessibility
+  const ids = {
+    title: 'standard-epic-title',
+    titleError: 'standard-epic-title-error',
+    description: 'standard-epic-description',
+    descriptionError: 'standard-epic-description-error',
+    acceptance: 'standard-epic-acceptance',
+    acceptanceError: 'standard-epic-acceptance-error',
+    complexity: 'standard-epic-complexity',
+    depends: 'standard-epic-depends',
+    techNotes: 'standard-epic-tech-notes',
+    techNotesError: 'standard-epic-tech-notes-error',
+  }
+
   return (
     <form
       onSubmit={handleSubmit}
       className={cn('flex flex-col items-center w-full max-w-lg', className)}
+      data-testid="standard-epic-step"
+      aria-label="Standard epic creation form"
     >
       {/* Icon */}
-      <div className="mb-6 flex size-14 items-center justify-center rounded-full bg-blue-500/10">
+      <div className="mb-6 flex size-14 items-center justify-center rounded-full bg-blue-500/10" aria-hidden="true">
         <ClipboardList className="size-7 text-blue-500" />
       </div>
 
       {/* Header */}
       <div className="text-center mb-6">
-        <h2 className="text-lg font-semibold">Standard Epic</h2>
+        <h2 className="text-lg font-semibold" id="standard-epic-heading">Standard Epic</h2>
         <p className="text-sm text-muted-foreground mt-1">
           Fill out the details to create a well-structured epic.
         </p>
@@ -137,63 +216,94 @@ export function StandardInterviewStep({
         <div className="w-full space-y-5">
           {/* Title */}
           <div className="space-y-2">
-            <Label htmlFor="epic-title" className="text-sm font-medium">
-              Title <span className="text-destructive">*</span>
+            <Label htmlFor={ids.title} className="text-sm font-medium">
+              Title <span className="text-destructive" aria-hidden="true">*</span>
+              <span className="sr-only">(required)</span>
             </Label>
             <Input
               ref={titleInputRef}
-              id="epic-title"
+              id={ids.title}
               value={formData.title}
               onChange={(e) => updateField('title', e.target.value)}
               placeholder="e.g., User Authentication System"
               disabled={isCreating}
+              aria-invalid={!!fieldErrors.title}
+              aria-describedby={fieldErrors.title ? ids.titleError : undefined}
+              data-testid="standard-epic-title-input"
+              className={cn(fieldErrors.title && 'border-destructive')}
             />
+            {fieldErrors.title && (
+              <p id={ids.titleError} className="text-xs text-destructive" role="alert">
+                {fieldErrors.title}
+              </p>
+            )}
           </div>
 
           {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="epic-description" className="text-sm font-medium">
+            <Label htmlFor={ids.description} className="text-sm font-medium">
               Description
             </Label>
             <Textarea
-              id="epic-description"
+              id={ids.description}
               value={formData.description}
               onChange={(e) => updateField('description', e.target.value)}
               placeholder="Describe the problem this epic solves..."
-              className="min-h-[80px] resize-none"
+              className={cn('min-h-[80px] resize-none', fieldErrors.description && 'border-destructive')}
               disabled={isCreating}
+              aria-invalid={!!fieldErrors.description}
+              aria-describedby={fieldErrors.description ? ids.descriptionError : undefined}
+              data-testid="standard-epic-description-input"
             />
+            {fieldErrors.description && (
+              <p id={ids.descriptionError} className="text-xs text-destructive" role="alert">
+                {fieldErrors.description}
+              </p>
+            )}
           </div>
 
           {/* Acceptance Criteria */}
           <div className="space-y-2">
-            <Label htmlFor="epic-acceptance" className="text-sm font-medium">
+            <Label htmlFor={ids.acceptance} className="text-sm font-medium">
               Acceptance Criteria
             </Label>
             <Textarea
-              id="epic-acceptance"
+              id={ids.acceptance}
               value={formData.acceptanceCriteria}
               onChange={(e) => updateField('acceptanceCriteria', e.target.value)}
               placeholder="One criterion per line..."
-              className="min-h-[80px] resize-none font-mono text-sm"
+              className={cn('min-h-[80px] resize-none font-mono text-sm', fieldErrors.acceptanceCriteria && 'border-destructive')}
               disabled={isCreating}
+              aria-invalid={!!fieldErrors.acceptanceCriteria}
+              aria-describedby={fieldErrors.acceptanceCriteria ? ids.acceptanceError : 'acceptance-hint'}
+              data-testid="standard-epic-acceptance-input"
             />
-            <p className="text-xs text-muted-foreground">
-              Enter each criterion on a new line
-            </p>
+            {fieldErrors.acceptanceCriteria ? (
+              <p id={ids.acceptanceError} className="text-xs text-destructive" role="alert">
+                {fieldErrors.acceptanceCriteria}
+              </p>
+            ) : (
+              <p id="acceptance-hint" className="text-xs text-muted-foreground">
+                Enter each criterion on a new line
+              </p>
+            )}
           </div>
 
           {/* Complexity & Dependencies Row */}
           <div className="grid grid-cols-2 gap-4">
             {/* Complexity */}
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Complexity</Label>
+              <Label htmlFor={ids.complexity} className="text-sm font-medium">Complexity</Label>
               <Select
                 value={formData.complexity}
                 onValueChange={(v) => updateField('complexity', v as EpicComplexity)}
                 disabled={isCreating}
               >
-                <SelectTrigger>
+                <SelectTrigger
+                  id={ids.complexity}
+                  data-testid="standard-epic-complexity-select"
+                  aria-label="Select epic complexity"
+                >
                   <SelectValue placeholder="Select size" />
                 </SelectTrigger>
                 <SelectContent>
@@ -213,13 +323,17 @@ export function StandardInterviewStep({
 
             {/* Dependencies */}
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Depends On</Label>
+              <Label htmlFor={ids.depends} className="text-sm font-medium">Depends On</Label>
               <Select
                 value={formData.dependsOnEpic ?? ''}
                 onValueChange={(v) => updateField('dependsOnEpic', v || null)}
                 disabled={isCreating}
               >
-                <SelectTrigger>
+                <SelectTrigger
+                  id={ids.depends}
+                  data-testid="standard-epic-depends-select"
+                  aria-label="Select epic dependency"
+                >
                   <SelectValue placeholder="None" />
                 </SelectTrigger>
                 <SelectContent>
@@ -236,24 +350,39 @@ export function StandardInterviewStep({
 
           {/* Technical Notes */}
           <div className="space-y-2">
-            <Label htmlFor="epic-tech-notes" className="text-sm font-medium">
+            <Label htmlFor={ids.techNotes} className="text-sm font-medium">
               Technical Notes
             </Label>
             <Textarea
-              id="epic-tech-notes"
+              id={ids.techNotes}
               value={formData.technicalNotes}
               onChange={(e) => updateField('technicalNotes', e.target.value)}
               placeholder="Any technical constraints or considerations..."
-              className="min-h-[60px] resize-none"
+              className={cn('min-h-[60px] resize-none', fieldErrors.technicalNotes && 'border-destructive')}
               disabled={isCreating}
+              aria-invalid={!!fieldErrors.technicalNotes}
+              aria-describedby={fieldErrors.technicalNotes ? ids.techNotesError : undefined}
+              data-testid="standard-epic-tech-notes-input"
             />
+            {fieldErrors.technicalNotes && (
+              <p id={ids.techNotesError} className="text-xs text-destructive" role="alert">
+                {fieldErrors.technicalNotes}
+              </p>
+            )}
           </div>
         </div>
       </ScrollArea>
 
       {/* Error message */}
-      {error && (
-        <p className="text-sm text-destructive mt-4 w-full">{error}</p>
+      {displayError && (
+        <div
+          role="alert"
+          className="flex items-center gap-2 text-sm text-destructive mt-4 w-full"
+          data-testid="standard-epic-error"
+        >
+          <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+          <span>{displayError}</span>
+        </div>
       )}
 
       {/* Actions */}
@@ -264,6 +393,7 @@ export function StandardInterviewStep({
           className="flex-1 bg-foreground-2"
           onClick={onBack}
           disabled={isCreating}
+          data-testid="standard-epic-back-button"
         >
           Back
         </Button>
@@ -271,11 +401,13 @@ export function StandardInterviewStep({
           type="submit"
           className="flex-1"
           disabled={!formData.title.trim() || isCreating}
+          aria-busy={isCreating}
+          data-testid="standard-epic-submit-button"
         >
           {isCreating ? (
             <>
-              <Loader2 className="size-4 mr-2 animate-spin" />
-              Creating...
+              <Loader2 className="size-4 mr-2 animate-spin" aria-hidden="true" />
+              <span>Creating...</span>
             </>
           ) : (
             'Create Epic'
