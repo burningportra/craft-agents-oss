@@ -243,12 +243,19 @@ export function TasksMainContent({
   )
 
   // Handle task navigation from within slide-over (clicking a dependency)
+  // Parses epicId from taskId format: "<epicId>.<taskNum>"
   const handleTaskNavigate = React.useCallback(
     (taskId: string) => {
       // Keep the slide-over open but switch to the new task
       setSelectedTaskId(taskId)
-      // Note: For simplicity, we keep the same epicId since deps are usually in the same epic
-      // If cross-epic navigation is needed, we'd need to resolve the task's epic
+
+      // Parse epicId from taskId (format: "<epicId>.<num>")
+      // e.g., "fn-1-interactive-guided-tasks-gui.5" -> "fn-1-interactive-guided-tasks-gui"
+      const lastDotIndex = taskId.lastIndexOf('.')
+      if (lastDotIndex > 0) {
+        const parsedEpicId = taskId.substring(0, lastDotIndex)
+        setSelectedTaskEpicId(parsedEpicId)
+      }
     },
     []
   )

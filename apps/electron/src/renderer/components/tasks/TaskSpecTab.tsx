@@ -6,6 +6,7 @@
  */
 
 import * as React from 'react'
+import { toast } from 'sonner'
 import { Markdown } from '@/components/markdown'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Loader2 } from 'lucide-react'
@@ -43,8 +44,12 @@ export function TaskSpecTab({ specPath, className }: TaskSpecTabProps) {
         setLoadingState('success')
       })
       .catch((err: Error) => {
-        setError(err.message || 'Failed to load spec')
+        const errorMsg = err.message || 'Failed to load spec'
+        setError(errorMsg)
         setLoadingState('error')
+        toast.error('Failed to load task spec', {
+          description: errorMsg,
+        })
       })
   }, [specPath])
 

@@ -103,6 +103,34 @@ export function TaskDetailSlideOver({
   const allTasks = useAtomValue(tasksAtomFamily(epicId))
   const updateTaskStatus = useSetAtom(updateTaskStatusAtom)
 
+  // Fetch task details helper
+  const fetchTaskDetails = React.useCallback(async () => {
+    if (!taskId || !workspaceRoot) return
+
+    setLoadingState('loading')
+    setError(null)
+
+    try {
+      const result: FlowBridgeResult<Task> = await window.electronAPI.flowTaskShow(workspaceRoot, taskId)
+      if (result.ok) {
+        setTask(result.data)
+        setLoadingState('success')
+      } else {
+        const errorMsg =
+          result.error.type === 'command_failed'
+            ? result.error.stderr || 'Failed to load task'
+            : result.error.type === 'flowctl_not_found'
+              ? 'flowctl not found'
+              : 'Failed to load task'
+        setError(errorMsg)
+        setLoadingState('error')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load task')
+      setLoadingState('error')
+    }
+  }, [taskId, workspaceRoot])
+
   // Fetch full task details when taskId changes
   React.useEffect(() => {
     if (!taskId || !open) {
@@ -112,31 +140,22 @@ export function TaskDetailSlideOver({
       return
     }
 
-    setLoadingState('loading')
-    setError(null)
+    fetchTaskDetails()
+  }, [taskId, open, fetchTaskDetails])
 
-    window.electronAPI
-      .flowTaskShow(workspaceRoot, taskId)
-      .then((result: FlowBridgeResult<Task>) => {
-        if (result.ok) {
-          setTask(result.data)
-          setLoadingState('success')
-        } else {
-          const errorMsg =
-            result.error.type === 'command_failed'
-              ? result.error.stderr || 'Failed to load task'
-              : result.error.type === 'flowctl_not_found'
-                ? 'flowctl not found'
-                : 'Failed to load task'
-          setError(errorMsg)
-          setLoadingState('error')
-        }
-      })
-      .catch((err: Error) => {
-        setError(err.message || 'Failed to load task')
-        setLoadingState('error')
-      })
-  }, [taskId, workspaceRoot, open])
+  // Subscribe to flow:changed events for live updates
+  React.useEffect(() => {
+    if (!taskId || !open || !workspaceRoot) return
+
+    const cleanup = window.electronAPI.onFlowChanged((changedWorkspaceRoot, payload) => {
+      // Refetch if change affects our task
+      if (changedWorkspaceRoot === workspaceRoot && payload.type === 'task') {
+        fetchTaskDetails()
+      }
+    })
+
+    return cleanup
+  }, [taskId, open, workspaceRoot, fetchTaskDetails])
 
   // Build dependency lists
   const { blockedBy, blocking } = React.useMemo(() => {
@@ -161,17 +180,14 @@ export function TaskDetailSlideOver({
   }, [task, allTasks])
 
   // Handle status action buttons
+  // Note: Relies on flow:changed event subscription to update task data after status change
   const handleStartTask = async () => {
     if (!task || actionLoading) return
     setActionLoading(true)
 
     try {
       await updateTaskStatus(workspaceRoot, epicId, task.id, 'in_progress')
-      // Refetch task to get updated data
-      const result = await window.electronAPI.flowTaskShow(workspaceRoot, task.id)
-      if (result.ok) {
-        setTask(result.data)
-      }
+      // flow:changed event will trigger refetch via subscription
     } catch (err) {
       // Error toast is shown by updateTaskStatus atom
     } finally {
@@ -185,11 +201,7 @@ export function TaskDetailSlideOver({
 
     try {
       await updateTaskStatus(workspaceRoot, epicId, task.id, 'done')
-      // Refetch task to get updated data
-      const result = await window.electronAPI.flowTaskShow(workspaceRoot, task.id)
-      if (result.ok) {
-        setTask(result.data)
-      }
+      // flow:changed event will trigger refetch via subscription
     } catch (err) {
       // Error toast is shown by updateTaskStatus atom
     } finally {
