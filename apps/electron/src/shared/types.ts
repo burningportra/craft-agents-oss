@@ -1037,7 +1037,7 @@ export interface ElectronAPI {
   flowTaskShow(workspaceRoot: string, taskId: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').Task>>
   flowTaskStart(workspaceRoot: string, taskId: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').CommandSuccess>>
   flowInit(workspaceRoot: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').CommandSuccess>>
-  onFlowChanged(callback: (workspaceRoot: string) => void): () => void
+  onFlowChanged(callback: (workspaceRoot: string, payload: { type: 'epic' | 'task' | 'config'; id?: string }) => void): () => void
 }
 
 /**

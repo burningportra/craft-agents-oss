@@ -60,9 +60,8 @@ Build the data access layer: Zod schemas for flow-next types, IPC channel defini
 - [ ] Typed FlowBridgeError discriminated union: flowctl_not_found, invalid_output, command_failed, timeout
 - [ ] TypeScript compiles without errors
 ## Done summary
-TBD
-
+Implemented flow-next data layer: Zod schemas for Epic/Task/Status validation, FLOW_* IPC channels (SCREAMING_SNAKE_CASE), FlowBridge class with execFile wrapper (10s timeout, serialized write queue, per-workspace binary resolution), typed FlowBridgeError discriminated union, IPC handlers, and preload contextBridge exposure.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: d1dacd0, 11ce1c6699f34ee81da90e45859fe3c5178cffc1
+- Tests: bun typecheck (pre-existing errors only, no new errors)
 - PRs:

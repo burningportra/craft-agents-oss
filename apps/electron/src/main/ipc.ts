@@ -2490,6 +2490,31 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // ─── Flow-next task management ────────────────────────────────────────
   const flowBridgeCache = new Map<string, import('./lib/flow-bridge').FlowBridge>()
+  const flowWatcherCache = new Map<string, import('./lib/flow-watcher').FlowWatcher>()
+
+  /**
+   * Ensure a FlowWatcher exists for the given workspace root.
+   * Created lazily on first flow IPC call; destroyed via stopFlowWatcher.
+   */
+  function ensureFlowWatcher(workspaceRoot: string): void {
+    if (flowWatcherCache.has(workspaceRoot)) return
+    const { FlowWatcher } = require('./lib/flow-watcher') as typeof import('./lib/flow-watcher')
+    const watcher = new FlowWatcher(workspaceRoot, () => {
+      // Broadcast to all windows; renderer filters by workspaceRoot in the payload
+      return BrowserWindow.getAllWindows().filter(w => !w.isDestroyed())
+    })
+    watcher.start()
+    flowWatcherCache.set(workspaceRoot, watcher)
+  }
+
+  /** Stop and remove a FlowWatcher for a workspace root */
+  function stopFlowWatcher(workspaceRoot: string): void {
+    const watcher = flowWatcherCache.get(workspaceRoot)
+    if (watcher) {
+      watcher.stop()
+      flowWatcherCache.delete(workspaceRoot)
+    }
+  }
 
   function getFlowBridge(workspaceRoot: string) {
     let bridge = flowBridgeCache.get(workspaceRoot)
@@ -2502,6 +2527,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   }
 
   ipcMain.handle(IPC_CHANNELS.FLOW_EPICS_LIST, (_event, workspaceRoot: string) => {
+    ensureFlowWatcher(workspaceRoot)
     return getFlowBridge(workspaceRoot).listEpics()
   })
 
