@@ -352,7 +352,7 @@ export function TasksMainContent({
           className
         )}
       >
-        <KanbanSquare className="h-10 w-10 opacity-40" />
+        <KanbanSquare className="h-10 w-10 text-foreground/40" />
         <div className="text-center">
           <p className="text-sm font-medium">Tasks</p>
           <p className="text-xs opacity-60 mt-1">Select an epic or create a new one</p>
