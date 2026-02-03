@@ -613,7 +613,7 @@ export class SessionManager {
         // Todo state
         if (managed.todoState !== header.todoState) {
           managed.todoState = header.todoState
-          this.sendEvent({ type: 'todo_state_changed', sessionId, todoState: header.todoState }, managed.workspace.id)
+          this.sendEvent({ type: 'todo_state_changed', sessionId, todoState: header.todoState ?? '' }, managed.workspace.id)
           changed = true
         }
 
@@ -1408,6 +1408,9 @@ export class SessionManager {
       permissionMode: defaultPermissionMode,
       workingDirectory: resolvedWorkingDir,
       hidden: options?.hidden,
+      todoState: options?.todoState,
+      labels: options?.labels,
+      isFlagged: options?.isFlagged,
     })
 
     // Model priority: options.model > storedSession.model > workspace default
@@ -1427,7 +1430,9 @@ export class SessionManager {
       lastMessageAt: storedSession.lastMessageAt ?? storedSession.lastUsedAt,  // Fallback for sessions saved before lastMessageAt was persisted
       streamingText: '',
       processingGeneration: 0,
-      isFlagged: false,
+      isFlagged: options?.isFlagged ?? false,
+      todoState: options?.todoState,
+      labels: options?.labels,
       permissionMode: defaultPermissionMode,
       workingDirectory: resolvedWorkingDir,
       sdkCwd: storedSession.sdkCwd,
@@ -1451,9 +1456,10 @@ export class SessionManager {
       lastMessageAt: managed.lastMessageAt,
       messages: [],
       isProcessing: false,
-      isFlagged: false,
+      isFlagged: options?.isFlagged ?? false,
       permissionMode: defaultPermissionMode,
-      todoState: undefined,  // User-controlled, defaults to undefined (treated as 'todo')
+      todoState: options?.todoState,
+      labels: options?.labels,
       workingDirectory: resolvedWorkingDir,
       model: managed.model,
       thinkingLevel: defaultThinkingLevel,
@@ -1630,6 +1636,7 @@ export class SessionManager {
             authHint: request.hint,
             authHeaderName: request.headerName,
             authSourceUrl: request.sourceUrl,
+            authPasswordRequired: request.passwordRequired,
           }),
         }
 
@@ -2165,6 +2172,14 @@ export class SessionManager {
     } else {
       this.activeViewingSession.delete(workspaceId)
     }
+  }
+
+  /**
+   * Clear active viewing session for a workspace.
+   * Called when all windows leave a workspace to ensure read/unread state is correct.
+   */
+  clearActiveViewingSession(workspaceId: string): void {
+    this.activeViewingSession.delete(workspaceId)
   }
 
   /**
