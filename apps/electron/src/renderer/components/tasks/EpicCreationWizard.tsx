@@ -333,6 +333,10 @@ export function EpicCreationWizard({
         aria-describedby="epic-wizard-description"
         data-testid="epic-creation-wizard"
       >
+        {/* Visually hidden description for accessibility */}
+        <DialogDescription id="epic-wizard-description" className="sr-only">
+          Wizard to create a new epic. Choose a template and fill out the form.
+        </DialogDescription>
         <div className="p-6">
           <AnimatePresence mode="wait" onExitComplete={handleCloseAnimationComplete}>
             {step === 'template' && (
@@ -476,9 +480,9 @@ function TemplatePickerStep({
         <DialogTitle id="epic-wizard-title" className="text-lg font-semibold">
           Create New Epic
         </DialogTitle>
-        <DialogDescription id="epic-wizard-description" className="text-sm text-muted-foreground mt-1">
+        <p className="text-sm text-muted-foreground mt-1">
           Choose how you'd like to define your epic.
-        </DialogDescription>
+        </p>
       </DialogHeader>
 
       {/* Template Cards */}

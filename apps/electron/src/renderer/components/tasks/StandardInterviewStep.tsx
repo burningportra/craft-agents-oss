@@ -325,8 +325,8 @@ export function StandardInterviewStep({
             <div className="space-y-2">
               <Label htmlFor={ids.depends} className="text-sm font-medium">Depends On</Label>
               <Select
-                value={formData.dependsOnEpic ?? ''}
-                onValueChange={(v) => updateField('dependsOnEpic', v || null)}
+                value={formData.dependsOnEpic ?? '__none__'}
+                onValueChange={(v) => updateField('dependsOnEpic', v === '__none__' ? null : v)}
                 disabled={isCreating}
               >
                 <SelectTrigger
@@ -337,7 +337,7 @@ export function StandardInterviewStep({
                   <SelectValue placeholder="None" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="__none__">None</SelectItem>
                   {availableEpics.map((epic) => (
                     <SelectItem key={epic.id} value={epic.id}>
                       {epic.title}
