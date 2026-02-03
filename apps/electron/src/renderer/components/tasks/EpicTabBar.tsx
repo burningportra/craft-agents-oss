@@ -173,39 +173,23 @@ export function EpicTabBar({ onAddTab, className }: EpicTabBarProps) {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.8 }}
                   transition={springTransition}
+                  className="group relative"
+                  onMouseDown={(e) => handleMiddleClick(epicId, e)}
                 >
                   <button
                     type="button"
                     onClick={() => handleTabClick(epicId)}
-                    onMouseDown={(e) => handleMiddleClick(epicId, e)}
                     className={cn(
-                      'group relative flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-colors',
+                      'relative flex items-center gap-1.5 pl-3 pr-7 py-1.5 text-sm rounded-md transition-colors',
                       'max-w-[180px] min-w-[80px]',
                       isActive
                         ? 'bg-foreground/10 text-foreground'
                         : 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground'
                     )}
+                    aria-selected={isActive}
+                    role="tab"
                   >
                     <span className="truncate flex-1 text-left">{title}</span>
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      onClick={(e) => handleCloseTab(epicId, e)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          closeTab(epicId)
-                        }
-                      }}
-                      className={cn(
-                        'shrink-0 rounded-sm p-0.5 transition-colors',
-                        'opacity-0 group-hover:opacity-100',
-                        'hover:bg-foreground/10',
-                        isActive && 'opacity-60'
-                      )}
-                    >
-                      <X className="h-3 w-3" />
-                    </span>
                     {/* Active indicator */}
                     {isActive && (
                       <motion.div
@@ -214,6 +198,20 @@ export function EpicTabBar({ onAddTab, className }: EpicTabBarProps) {
                         transition={springTransition}
                       />
                     )}
+                  </button>
+                  {/* Close button - separate from tab button for accessibility */}
+                  <button
+                    type="button"
+                    onClick={(e) => handleCloseTab(epicId, e)}
+                    aria-label={`Close ${title} tab`}
+                    className={cn(
+                      'absolute right-1.5 top-1/2 -translate-y-1/2 shrink-0 rounded-sm p-0.5 transition-colors',
+                      'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+                      'hover:bg-foreground/10 focus-visible:ring-2 focus-visible:ring-ring',
+                      isActive && 'opacity-60'
+                    )}
+                  >
+                    <X className="h-3 w-3" />
                   </button>
                 </motion.div>
               )

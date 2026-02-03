@@ -26,11 +26,11 @@ import {
   openTabsAtom,
   activeTabAtom,
   epicsAtom,
+  epicsLoadingStateAtom,
   tasksAtomFamily,
   viewModePerEpicAtomFamily,
   setViewModeAtom,
   calculateEpicProgress,
-  suggestViewMode,
   isGraphViewAvailable,
   getEffectiveViewMode,
   type ViewMode,
@@ -146,9 +146,27 @@ function EpicViewSelector({
  */
 function EpicHeader({ epicId }: { epicId: string }) {
   const epics = useAtomValue(epicsAtom)
+  const epicsLoading = useAtomValue(epicsLoadingStateAtom)
   const epic = epics.find((e) => e.id === epicId)
 
-  if (!epic) return null
+  // Show loading state while epics are loading
+  if (epicsLoading === 'loading' && !epic) {
+    return (
+      <div className="px-6 py-4 border-b border-border/50">
+        <div className="h-6 w-48 bg-foreground/5 rounded animate-pulse" />
+        <div className="h-4 w-32 bg-foreground/5 rounded mt-2 animate-pulse" />
+      </div>
+    )
+  }
+
+  // Epic not found (was deleted while tab was open)
+  if (!epic) {
+    return (
+      <div className="px-6 py-4 border-b border-border/50 text-muted-foreground">
+        <p className="text-sm">Epic not found: {epicId}</p>
+      </div>
+    )
+  }
 
   const progressPercent = calculateEpicProgress(epic)
 

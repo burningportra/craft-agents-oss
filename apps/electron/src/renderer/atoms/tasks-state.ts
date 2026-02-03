@@ -68,6 +68,39 @@ export const selectedEpicIdAtom = atomWithStorage<string | null>(
   null
 )
 
+// ─── Tab Navigation Atoms ─────────────────────────────────────────────────────
+// Note: Defined early so resetTasksStateAtom can reference them
+
+/**
+ * Open tabs: ordered array of epic IDs
+ * Persisted via atomWithStorage - restores on reload
+ */
+export const openTabsAtom = atomWithStorage<string[]>(
+  'tasks-open-tabs',
+  []
+)
+
+/**
+ * Active (currently visible) tab: epic ID
+ * Persisted via atomWithStorage - restores on reload
+ */
+export const activeTabAtom = atomWithStorage<string | null>(
+  'tasks-active-tab',
+  null
+)
+
+/**
+ * View mode override per epic
+ * Uses atomFamily for per-epic storage with atomWithStorage for persistence
+ */
+export const viewModePerEpicAtomFamily = atomFamily(
+  (epicId: string) => atomWithStorage<ViewMode | null>(
+    `tasks-view-mode-${epicId}`,
+    null
+  ),
+  (a, b) => a === b
+)
+
 // ─── Tasks per Epic ──────────────────────────────────────────────────────────
 
 /**
@@ -126,6 +159,8 @@ export const loadEpicsAtom = atom(
         set(epicsAtom, result.data.epics)
         set(epicsLoadingStateAtom, 'success')
 
+        const epicIds = result.data.epics.map(e => e.id)
+
         // Auto-select first epic if none selected
         const currentSelected = get(selectedEpicIdAtom)
         if (!currentSelected && result.data.epics.length > 0) {
@@ -133,8 +168,22 @@ export const loadEpicsAtom = atom(
         }
 
         // If selected epic no longer exists, select first available
-        if (currentSelected && !result.data.epics.find(e => e.id === currentSelected)) {
+        if (currentSelected && !epicIds.includes(currentSelected)) {
           set(selectedEpicIdAtom, result.data.epics[0]?.id ?? null)
+        }
+
+        // Validate persisted tabs against loaded epics (filter out stale tabs)
+        const openTabs = get(openTabsAtom)
+        const validTabs = openTabs.filter(id => epicIds.includes(id))
+        if (validTabs.length !== openTabs.length) {
+          set(openTabsAtom, validTabs)
+        }
+
+        // Validate active tab
+        const activeTab = get(activeTabAtom)
+        if (activeTab && !epicIds.includes(activeTab)) {
+          set(activeTabAtom, validTabs[0] ?? null)
+          set(selectedEpicIdAtom, validTabs[0] ?? null)
         }
       } else {
         // Handle error
@@ -226,7 +275,7 @@ export const initFlowAtom = atom(
 
 /**
  * Action atom: Reset all tasks state (for workspace changes)
- * Clears selected epic to prevent cross-workspace selection bugs
+ * Clears selected epic and tab state to prevent cross-workspace bugs
  */
 export const resetTasksStateAtom = atom(
   null,
@@ -236,39 +285,10 @@ export const resetTasksStateAtom = atom(
     set(epicsErrorAtom, null)
     // Clear selection on workspace change to prevent cross-workspace selection bugs
     set(selectedEpicIdAtom, null)
+    // Clear tab state to prevent stale tabs from previous workspace
+    set(openTabsAtom, [])
+    set(activeTabAtom, null)
   }
-)
-
-// ─── Tab Navigation Atoms ─────────────────────────────────────────────────────
-
-/**
- * Open tabs: ordered array of epic IDs
- * Persisted via atomWithStorage - restores on reload
- */
-export const openTabsAtom = atomWithStorage<string[]>(
-  'tasks-open-tabs',
-  []
-)
-
-/**
- * Active (currently visible) tab: epic ID
- * Persisted via atomWithStorage - restores on reload
- */
-export const activeTabAtom = atomWithStorage<string | null>(
-  'tasks-active-tab',
-  null
-)
-
-/**
- * View mode override per epic
- * Uses atomFamily for per-epic storage with atomWithStorage for persistence
- */
-export const viewModePerEpicAtomFamily = atomFamily(
-  (epicId: string) => atomWithStorage<ViewMode | null>(
-    `tasks-view-mode-${epicId}`,
-    null
-  ),
-  (a, b) => a === b
 )
 
 // ─── Tab Action Atoms ─────────────────────────────────────────────────────────
