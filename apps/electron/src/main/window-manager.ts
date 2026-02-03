@@ -172,12 +172,13 @@ export class WindowManager {
     if (restoreUrl) {
       // Restore from saved URL - need to adapt for dev vs prod
       if (VITE_DEV_SERVER_URL) {
-        // In dev mode, replace the base URL but keep the path and query
+        // In dev mode, only preserve query params from saved URL (not pathname).
+        // The saved pathname may be from prod (file:// with app bundle path) which
+        // would create invalid URLs like localhost:5173/Applications/Craft%20Agents.app/...
         try {
           const savedUrl = new URL(restoreUrl)
           const devUrl = new URL(VITE_DEV_SERVER_URL)
-          // Preserve pathname and search from saved URL, use dev server host
-          devUrl.pathname = savedUrl.pathname
+          // Only preserve search params, ignore pathname (Vite serves from root)
           devUrl.search = savedUrl.search
           window.loadURL(devUrl.toString())
         } catch {
