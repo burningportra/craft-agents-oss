@@ -196,7 +196,7 @@ export function EpicTabBar({ workspaceRoot, onAddTab, className }: EpicTabBarPro
   }
 
   return (
-    <div className={cn('flex items-center border-b border-border/50', className)}>
+    <div className={cn('flex items-center border-b border-border/50 titlebar-no-drag', className)}>
       {/* Left scroll arrow */}
       <AnimatePresence>
         {showLeftArrow && (

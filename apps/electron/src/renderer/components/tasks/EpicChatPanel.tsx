@@ -8,7 +8,7 @@
  * - Action buttons for quick command insertion
  * - Write-with-confirmation for task mutations
  * - Auto-save draft on blur/tab switch
- * - Resizable width with persistence (autoSaveId)
+ * - Animated slide-in/out panel (320px fixed width)
  */
 
 import * as React from 'react'
@@ -22,11 +22,6 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Textarea } from '@/components/ui/textarea'
 import { Markdown } from '@/components/markdown'
-import {
-  ResizablePanelGroup,
-  ResizablePanel,
-  ResizableHandle,
-} from '@/components/ui/resizable'
 import {
   useEpicChatHistory,
   type EpicChatMessage,
@@ -137,9 +132,10 @@ function MessageBubble({ message }: MessageBubbleProps) {
 interface ChatContentProps {
   epicId: string
   workspaceRoot: string
+  onClose: () => void
 }
 
-function ChatContent({ epicId, workspaceRoot }: ChatContentProps) {
+function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
   const epics = useAtomValue(epicsAtom)
   const epic = epics.find((e) => e.id === epicId)
   const tasks = useAtomValue(tasksAtomFamily(epicId))
@@ -310,21 +306,29 @@ function ChatContent({ epicId, workspaceRoot }: ChatContentProps) {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border/50">
-        <div className="flex items-center gap-2">
-          <MessageCircle className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Epic Chat</span>
-        </div>
+      <div className="shrink-0 flex items-center gap-2 px-3 py-3 border-b border-border/50 titlebar-no-drag">
+        <MessageCircle className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-medium flex-1">Epic Chat</span>
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7"
+          className="h-6 w-6 titlebar-no-drag"
           onClick={handleClear}
           disabled={messages.length === 0}
+          title="Clear chat history"
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Trash2 className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 titlebar-no-drag"
+          onClick={onClose}
+          title="Close chat panel"
+        >
+          <X className="h-4 w-4" />
         </Button>
       </div>
 
@@ -524,46 +528,27 @@ export function EpicChatPanel({
     }
   }, [])
 
-  if (!isOpen) {
-    return <div className={cn('h-full', className)}>{children}</div>
-  }
-
   return (
-    <ResizablePanelGroup
-      direction="horizontal"
-      autoSaveId="epic-chat"
-      className={cn('h-full', className)}
-    >
+    <div className={cn('flex h-full overflow-hidden', className)}>
       {/* Main content */}
-      <ResizablePanel defaultSize={65} minSize={40}>
-        {children}
-      </ResizablePanel>
+      <div className="flex-1 min-w-0 h-full" style={{ position: 'relative', zIndex: 50 }}>{children}</div>
 
-      <ResizableHandle withHandle />
-
-      {/* Chat panel */}
-      <ResizablePanel defaultSize={35} minSize={25} maxSize={50}>
-        <div className="h-full border-l border-border/50 bg-background">
-          {/* Close button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-2 right-2 h-6 w-6 z-10"
-            onClick={onToggle}
+      {/* Chat panel - matches AISuggestionSidebar pattern */}
+      <AnimatePresence initial={false}>
+        {isOpen && epicId && (
+          <motion.div
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 320, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={springTransition}
+            className="h-full border-l border-border/50 bg-background flex flex-col overflow-hidden"
+            style={{ position: 'relative', zIndex: 50 }}
           >
-            <X className="h-3.5 w-3.5" />
-          </Button>
-
-          {epicId ? (
-            <ChatContent epicId={epicId} workspaceRoot={workspaceRoot} />
-          ) : (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-              <p className="text-sm">Select an epic to start chatting</p>
-            </div>
-          )}
-        </div>
-      </ResizablePanel>
-    </ResizablePanelGroup>
+            <ChatContent epicId={epicId} workspaceRoot={workspaceRoot} onClose={onToggle} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
 

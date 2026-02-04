@@ -406,7 +406,7 @@ export function AISuggestionSidebar({
   return (
     <div className={cn('flex h-full overflow-hidden', className)}>
       {/* Main content */}
-      <div className="flex-1 min-w-0 h-full">{children}</div>
+      <div className="flex-1 min-w-0 h-full" style={{ position: 'relative', zIndex: 50 }}>{children}</div>
 
       {/* Sidebar */}
       <AnimatePresence initial={false}>
@@ -417,6 +417,7 @@ export function AISuggestionSidebar({
             exit={{ width: 0, opacity: 0 }}
             transition={springTransition}
             className="h-full border-l border-border/50 bg-background/50 flex flex-col overflow-hidden"
+            style={{ position: 'relative', zIndex: 50 }}
           >
             {/* Header */}
             <div className="flex items-center justify-between px-3 py-3 border-b border-border/50">

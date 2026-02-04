@@ -203,7 +203,7 @@ function EpicHeader({
   const progressPercent = calculateEpicProgress(epic)
 
   return (
-    <div className="px-6 py-4 border-b border-border/50">
+    <div className="px-6 py-4 border-b border-border/50 titlebar-no-drag">
       {/* Title row */}
       <h1 className="text-lg font-semibold">{epic.title}</h1>
 
