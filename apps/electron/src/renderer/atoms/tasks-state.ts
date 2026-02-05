@@ -401,6 +401,12 @@ function readLegacyUiState(): FlowUiState | null {
     const openTabs: string[] = openTabsRaw ? JSON.parse(openTabsRaw) : []
     const activeTab: string | null = activeTabRaw ? JSON.parse(activeTabRaw) : null
 
+    // Validate types to guard against corrupted localStorage data
+    if (!Array.isArray(openTabs) || (activeTab !== null && typeof activeTab !== 'string')) {
+      console.warn('[Migration] Invalid localStorage data shape, skipping migration')
+      return null
+    }
+
     // Collect view mode overrides from localStorage (keyed by prefix)
     const viewModePerEpic: Record<string, string> = {}
     for (let i = 0; i < localStorage.length; i++) {
@@ -493,6 +499,16 @@ function parseUiState(state: FlowUiState): {
 export const hydrateUiStateAtom = atom(
   null,
   async (get, set, projectPath: string) => {
+    // Clear any pending writes from previous project to prevent stale data
+    // being written to the new project's ui-state.json (race condition on
+    // rapid project switches where the 500ms debounce timer fires after
+    // the switch completes).
+    const existingTimer = get(uiStatePersistTimerAtom)
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+      set(uiStatePersistTimerAtom, null)
+    }
+
     try {
       // Read persisted UI state from .flow/ui-state.json
       const persisted = await window.electronAPI.flowUiStateRead(projectPath)
@@ -655,10 +671,10 @@ export const loadEpicsAtom = atom(
 
         const epicIds = result.data.epics.map(e => e.id)
 
-        // Auto-select first epic if none selected
+        // Auto-open most active epic if no tab is currently selected
+        // (happens on first open with no ui-state.json, or if persisted state had activeTab: null)
         const currentSelected = get(selectedEpicIdAtom)
         if (!currentSelected && result.data.epics.length > 0) {
-          // No UI state was hydrated — auto-open most active epic
           const mostActive = findMostActiveEpic(result.data.epics)
           if (mostActive) {
             set(selectedEpicIdAtom, mostActive.id)

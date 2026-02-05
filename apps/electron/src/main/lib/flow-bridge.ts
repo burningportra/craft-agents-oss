@@ -299,8 +299,9 @@ export class FlowBridge {
       } else {
         await writeFile(gitignorePath, entry + '\n', 'utf-8')
       }
-    } catch {
-      // Best-effort — don't fail the write operation for a gitignore issue
+    } catch (err) {
+      // Best-effort — don't fail the write operation, but warn about gitignore issue
+      console.warn(`[FlowBridge] Failed to update .flow/.gitignore: ${err instanceof Error ? err.message : err}`)
     }
   }
 
