@@ -786,6 +786,8 @@ export const IPC_CHANNELS = {
   FLOW_PROJECT_CHECK_STATUS: 'flow:project-check-status',
   // Git info (lazily fetched when project is selected)
   GET_GIT_INFO: 'flow:git-info',
+  // Git root detection (for add project folder dialog)
+  GET_GIT_ROOT: 'flow:git-root',
   // Per-project UI state persistence
   FLOW_UI_STATE_READ: 'flow:ui-state-read',
   FLOW_UI_STATE_WRITE: 'flow:ui-state-write',
@@ -1183,6 +1185,8 @@ export interface ElectronAPI {
   flowProjectCheckStatus(projectPath: string): Promise<{ status: FlowProjectStatus; error?: string }>
   // Git info (lazily fetched when project is selected)
   getGitInfo(dirPath: string): Promise<FlowProjectGitInfo | null>
+  // Git root detection (returns repo root path, or null if not a git repo)
+  getGitRoot(dirPath: string): Promise<string | null>
   // Per-project UI state persistence
   flowUiStateRead(projectPath: string): Promise<FlowUiState | null>
   flowUiStateWrite(projectPath: string, state: FlowUiState): Promise<{ success: boolean; error?: string }>

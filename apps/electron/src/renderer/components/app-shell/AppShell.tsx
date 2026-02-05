@@ -110,6 +110,7 @@ import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
 import { TasksNavigatorPanel } from "../tasks/TasksNavigatorPanel"
 import { epicWizardOpenAtom, activeFlowProjectAtom } from "@/atoms/tasks-state"
+import { ProjectSwitcher } from "./ProjectSwitcher"
 import { PanelHeader } from "./PanelHeader"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
 import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
@@ -1966,12 +1967,12 @@ function AppShellContent({
                 {/* Primary Nav: All Chats, Flagged, States, Labels | Sources, Skills | Settings */}
                 {/* pb-4 provides clearance so the last item scrolls above the mask-fade-bottom gradient */}
                 <div className="flex-1 overflow-y-auto min-h-0 mask-fade-bottom pb-4">
+                {/* Tasks nav + Project Switcher */}
                 <LeftSidebar
                   isCollapsed={false}
                   getItemProps={getSidebarItemProps}
                   focusedItemId={focusedSidebarItemId}
                   links={[
-                    // --- Tasks Section (first for prominence) ---
                     {
                       id: "nav:tasks",
                       title: "Tasks",
@@ -1984,6 +1985,16 @@ function AppShellContent({
                         onClosePanel: handleAllChatsClick,
                       },
                     },
+                  ]}
+                />
+                {/* Project Switcher: shows registered projects with avatars and health badges */}
+                <ProjectSwitcher className="pb-1" />
+                {/* Separator + Chats/Sources/Skills/Settings */}
+                <LeftSidebar
+                  isCollapsed={false}
+                  getItemProps={getSidebarItemProps}
+                  focusedItemId={focusedSidebarItemId}
+                  links={[
                     // --- Separator ---
                     { id: "separator:tasks-chats", type: "separator" },
                     // --- Chats Section ---

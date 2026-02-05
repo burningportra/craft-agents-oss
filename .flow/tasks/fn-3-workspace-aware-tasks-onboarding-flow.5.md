@@ -35,8 +35,10 @@ Implement the remaining onboarding wizard steps: Configure (3), Initialize (4), 
 - `EpicCreationWizard.tsx` has props `{ open, onOpenChange, workspaceRoot, epics, onEpicCreated, onOpenChat }` — reuse for step 5
 - `canvas-confetti` is recommended over `react-confetti` — lighter, supports web workers, no React dependency
 <!-- Updated by plan-sync: fn-3...1 used activeFlowProjectAtom (not activeProjectAtom), and FlowWatcher lifecycle is managed via syncFlowWatcherAtom action atom -->
+<!-- Updated by plan-sync: fn-3...2 — note that DEFAULT_VIEW_MODE in tasks-state.ts is 'list' (not kanban). Step 3's "default: kanban" is the wizard's recommended selection; if user skips Step 3, the code-level default 'list' applies. Ensure Step 3 sets viewModePerEpic via setViewModeAtom (exported from tasks-state.ts) which triggers scheduleUiStatePersistAtom for debounced write to .flow/ui-state.json. -->
 - FlowBridge already has `init()` method at `flow-bridge.ts` — may just need IPC wiring
 - On init success, use `setActiveFlowProjectAtom` to refresh status (it calls `flowProjectCheckStatus` and updates `activeFlowProjectAtom.flowStatus`)
+- `.flow/.gitignore` management for `ui-state.json` is already handled by FlowBridge's `writeUiState()` (Task 2) — no extra gitignore work needed after init
 ## Acceptance
 - [ ] Step 3 shows configure options (default view mode)
 - [ ] Step 3 defaults are sensible (kanban view)

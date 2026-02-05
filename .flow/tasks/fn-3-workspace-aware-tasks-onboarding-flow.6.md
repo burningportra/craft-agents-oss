@@ -31,8 +31,11 @@ Implement the brief welcome banner for cloned repos, polished empty states, and 
 - `TasksEmptyState.tsx` uses the `Empty` compound component — follow same pattern for new empty states
 - FlowWatcher's `.flow/` deletion handling (`flow-watcher.ts:99-105`) falls back to parent directory watching
 <!-- Updated by plan-sync: fn-3...1 used activeFlowProjectAtom/registeredFlowProjectsAtom (not activeProjectAtom/registeredProjectsAtom). Action atoms: registerFlowProjectAtom, unregisterFlowProjectAtom, setActiveFlowProjectAtom. Old tutorial removal moved to Task 4. -->
+<!-- Updated by plan-sync: fn-3...2 already implemented auto-open most active epic logic in loadEpicsAtom (tasks-state.ts ~L674-686) via findMostActiveEpic(). When no ui-state.json exists and no tab is selected, loadEpicsAtom auto-opens the most active epic using the same tiebreaker (in-progress count → updated_at → epic ID). Task 6 should NOT re-implement this — focus only on the brief welcome banner UI overlay. The auto-open fires automatically from the existing hydration + epic-load path. -->
 - Task 3's `ProjectSwitcher` has the `+ Add Project` handler — reuse it via shared function/atom
 - Old tutorial removal (OnboardingTutorial.tsx + KEYS.flowTasksOnboardingComplete) is handled in Task 4, not Task 6
+- Auto-open most active epic is already implemented in `loadEpicsAtom` (Task 2) — the brief welcome banner is additive UI on top of existing auto-open behavior
+- `FlowUiState` type (in `types.ts`) currently has `{ openTabs?, activeTab?, viewModePerEpic? }` — Task 6 needs to extend it with `welcomeDismissed?: boolean`
 ## Acceptance
 - [ ] Brief welcome banner shows for cloned repos (has `.flow/`, no `ui-state.json`)
 - [ ] Banner shows project name, epic/task counts, in-progress summary

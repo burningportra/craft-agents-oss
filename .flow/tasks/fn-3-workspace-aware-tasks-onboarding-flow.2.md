@@ -46,9 +46,8 @@ Migrate per-project UI state (open tabs, active tab, view mode) from global loca
 - [ ] Migration handles missing `.flow/` gracefully (uses in-memory defaults)
 - [ ] App typechecks and lints clean
 ## Done summary
-TBD
-
+Migrated per-project UI state (openTabs, activeTab, viewModePerEpic) from global localStorage atoms to .flow/ui-state.json with debounced 500ms writes, localStorage migration with cleanup, and auto-open most active epic on first open. Added readUiState/writeUiState to FlowBridge with serialized write queue and automatic .gitignore management.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: f31aa3e, 3d7cf50
+- Tests: cd apps/electron && bun run typecheck, cd apps/electron && bun run lint
 - PRs:

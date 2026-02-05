@@ -2802,6 +2802,25 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
+  // Git root detection (for add project folder dialog)
+  ipcMain.handle(IPC_CHANNELS.GET_GIT_ROOT, (_event, dirPath: string) => {
+    const validation = validateProjectPath(dirPath)
+    if (!validation.valid) return null
+    const resolvedDir = resolve(dirPath)
+    try {
+      const root = execSync('git rev-parse --show-toplevel', {
+        cwd: resolvedDir,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 5000,
+      }).trim()
+      return root || null
+    } catch {
+      // Not a git repo, git not installed, or other error
+      return null
+    }
+  })
+
   // Per-project UI state persistence (delegates to FlowBridge for serialized writes + gitignore)
   ipcMain.handle(IPC_CHANNELS.FLOW_UI_STATE_READ, async (_event, projectPath: string) => {
     const validation = validateProjectPath(projectPath)

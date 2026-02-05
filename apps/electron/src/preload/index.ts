@@ -557,6 +557,9 @@ const api: ElectronAPI = {
   // Git info (lazily fetched when project is selected)
   getGitInfo: (dirPath: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.GET_GIT_INFO, dirPath),
+  // Git root detection (for add project folder dialog)
+  getGitRoot: (dirPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_GIT_ROOT, dirPath),
   // Per-project UI state persistence
   flowUiStateRead: (projectPath: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.FLOW_UI_STATE_READ, projectPath),
