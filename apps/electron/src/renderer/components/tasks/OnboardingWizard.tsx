@@ -151,6 +151,10 @@ export function OnboardingWizard({
     if (currentStep < 5) {
       setCurrentStep((currentStep + 1) as OnboardingStep)
     } else {
+      // Reset state before closing to prevent stale state on reopen
+      setCurrentStep(1)
+      setCompletedSteps(new Set())
+      setDirection(1)
       onComplete()
       onOpenChange(false)
     }
@@ -190,7 +194,14 @@ export function OnboardingWizard({
         </DialogDescription>
 
         {/* Progress Bar */}
-        <div className="h-1 bg-foreground/5 shrink-0">
+        <div
+          className="h-1 bg-foreground/5 shrink-0"
+          role="progressbar"
+          aria-valuenow={currentStep}
+          aria-valuemin={1}
+          aria-valuemax={5}
+          aria-label="Onboarding progress"
+        >
           <motion.div
             className="h-full bg-foreground/80 rounded-r-full"
             initial={{ width: '0%' }}
@@ -470,8 +481,10 @@ const DEMO_PHASES: { id: DemoPhase; label: string; icon: React.ReactNode; color:
 function InteractiveDemoStep({ projectName }: InteractiveDemoStepProps) {
   const [activePhase, setActivePhase] = React.useState<DemoPhase>('plan')
 
-  // Sample data for the demo
-  const sampleEpic = `Add authentication to ${projectName}`
+  // Sample data for the demo — adjust wording if using fallback project name
+  const sampleEpic = projectName === 'your project'
+    ? 'Add user authentication'
+    : `Add authentication to ${projectName}`
   const sampleTasks = [
     { id: 1, title: 'Set up auth provider', status: 'done' as const },
     { id: 2, title: 'Create login page', status: 'in-progress' as const },
