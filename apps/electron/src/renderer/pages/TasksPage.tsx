@@ -129,16 +129,16 @@ export function TasksPage() {
     setOnboardingDismissed(true)
   }, [])
 
+  // Stores the user's view mode preference from onboarding step 3.
+  // Applied to the newly created epic in handleOnboardingEpicCreated.
+  const onboardingViewModeRef = React.useRef<'list' | 'kanban'>('kanban')
+
   // Handle view mode selection from onboarding step 3
   const handleOnboardingSetViewMode = React.useCallback((mode: 'list' | 'kanban') => {
-    // Apply the selected view mode as the default for any newly opened epic.
-    // setViewModeAtom requires an epicId — we set '__default' as a sentinel that
-    // TasksMainContent can read for initial epic opens.
-    // For now, if there's an active epic, apply it there; otherwise store for later.
-    if (activeEpicId) {
-      setViewMode(activeEpicId, mode)
-    }
-  }, [activeEpicId, setViewMode])
+    // Store the preference for application when an epic is created in step 5.
+    // During onboarding there is no active epic yet, so we defer the setViewMode call.
+    onboardingViewModeRef.current = mode
+  }, [])
 
   // Handle project refresh after flow-next init (onboarding step 4)
   const handleRefreshProject = React.useCallback(() => {
@@ -147,11 +147,11 @@ export function TasksPage() {
     }
   }, [projectPath, setActiveProject])
 
-  // Handle epic created from onboarding step 5 — navigate to kanban view
+  // Handle epic created from onboarding step 5 — navigate to selected view
   const handleOnboardingEpicCreated = React.useCallback((epicId: string) => {
     openEpicTab(epicId)
-    // Set kanban as the view mode for the new epic (onboarding recommends kanban)
-    setViewMode(epicId, 'kanban')
+    // Apply the view mode preference from onboarding step 3 (default: kanban)
+    setViewMode(epicId, onboardingViewModeRef.current)
     navigate(routes.view.epicDetail(epicId))
   }, [openEpicTab, setViewMode])
 

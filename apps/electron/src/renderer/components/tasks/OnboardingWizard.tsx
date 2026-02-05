@@ -45,7 +45,7 @@ import {
 } from '@/components/ui/dialog'
 import { EpicCreationWizard } from './EpicCreationWizard'
 import type { FlowProjectContext } from '../../../shared/types'
-import type { EpicSummary } from '../../../shared/flow-schemas'
+import type { EpicSummary, FlowBridgeError } from '../../../shared/flow-schemas'
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -89,6 +89,11 @@ const STEPS: StepMeta[] = [
   { step: 5, label: 'Create', icon: <PartyPopper className="size-4" />, skippable: true },
 ]
 
+// ─── Constants ──────────────────────────────────────────────────────────────────
+
+/** Delay before auto-advancing from Step 4 success to Step 5 (visual feedback) */
+const STEP_4_SUCCESS_DELAY_MS = 800
+
 // ─── Spring Animation Config ────────────────────────────────────────────────────
 
 const springTransition = {
@@ -127,8 +132,18 @@ export function OnboardingWizard({
   const [initError, setInitError] = React.useState<string | null>(null)
 
   // Step 5 state: epic creation
-  const [epicWizardOpen, setEpicWizardOpen] = React.useState(false)
+  const [epicWizardOpen, setEpicWizardOpen] = React.useState<boolean>(false)
   const [createdEpic, setCreatedEpic] = React.useState<{ id: string; title: string; taskCount: number } | null>(null)
+
+  // Ref for Step 4 auto-advance timeout cleanup
+  const initTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Cleanup timeout on unmount
+  React.useEffect(() => {
+    return () => {
+      if (initTimeoutRef.current) clearTimeout(initTimeoutRef.current)
+    }
+  }, [])
 
   // Fetch project context on mount / projectPath change
   React.useEffect(() => {
@@ -207,6 +222,15 @@ export function OnboardingWizard({
 
   const handlePrev = React.useCallback(() => {
     setDirection(-1)
+    // Reset step 4 init state when navigating away so re-entry can re-trigger init
+    if (currentStep === 4) {
+      if (initTimeoutRef.current) {
+        clearTimeout(initTimeoutRef.current)
+        initTimeoutRef.current = null
+      }
+      setInitStatus('idle')
+      setInitError(null)
+    }
     if (currentStep > 1) {
       setCurrentStep((currentStep - 1) as OnboardingStep)
     }
@@ -232,6 +256,12 @@ export function OnboardingWizard({
 
   // Step 4: Initialize flow-next
   const handleInit = React.useCallback(async () => {
+    // Clear any pending timeout from a prior init attempt
+    if (initTimeoutRef.current) {
+      clearTimeout(initTimeoutRef.current)
+      initTimeoutRef.current = null
+    }
+
     setInitStatus('loading')
     setInitError(null)
 
@@ -243,19 +273,15 @@ export function OnboardingWizard({
         // Refresh project status to update activeFlowProjectAtom
         onRefreshProject?.()
         // Auto-advance to step 5 after a brief delay for visual feedback
-        setTimeout(() => {
+        initTimeoutRef.current = setTimeout(() => {
+          initTimeoutRef.current = null
           setCompletedSteps((prev) => new Set([...prev, 4 as OnboardingStep]))
           setDirection(1)
           setCurrentStep(5)
-        }, 800)
+        }, STEP_4_SUCCESS_DELAY_MS)
       } else {
-        const errorMsg = 'error' in result && result.error
-          ? typeof result.error === 'string'
-            ? result.error
-            : 'type' in result.error
-              ? getFlowErrorMessage(result.error.type as string, (result.error as Record<string, unknown>).stderr as string | undefined)
-              : 'Failed to initialize flow-next'
-          : 'Failed to initialize flow-next'
+        const error = result.error
+        const errorMsg = getFlowBridgeErrorMessage(error)
         setInitStatus('error')
         setInitError(errorMsg)
       }
@@ -345,6 +371,7 @@ export function OnboardingWizard({
           aria-valuenow={currentStep}
           aria-valuemin={1}
           aria-valuemax={5}
+          aria-valuetext={`Step ${currentStep} of 5: ${STEPS[currentStep - 1].label}`}
           aria-label="Onboarding progress"
         >
           <motion.div
@@ -424,8 +451,12 @@ export function OnboardingWizard({
                   onInit={handleInit}
                   onRetry={handleInit}
                   onCancel={() => {
+                    // Cancel skips past step 4 entirely (init deferred to later)
                     setInitStatus('idle')
                     setInitError(null)
+                    setCompletedSteps((prev) => new Set([...prev, 4 as OnboardingStep]))
+                    setDirection(1)
+                    setCurrentStep(5)
                   }}
                 />
               </motion.div>
@@ -1201,8 +1232,8 @@ function CreateEpicStep({ createdEpic, onOpenEpicWizard, onGetStarted }: CreateE
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 
-function getFlowErrorMessage(type: string, stderr?: string): string {
-  switch (type) {
+function getFlowBridgeErrorMessage(error: FlowBridgeError): string {
+  switch (error.type) {
     case 'flowctl_not_found':
       return 'Flow CLI not found. Make sure flowctl is installed in .flow/bin/'
     case 'invalid_json':
@@ -1210,12 +1241,10 @@ function getFlowErrorMessage(type: string, stderr?: string): string {
     case 'invalid_output':
       return 'Invalid response format from Flow CLI.'
     case 'command_failed':
-      return stderr || 'Flow command failed.'
+      return error.stderr || 'Flow command failed.'
     case 'timeout':
       return 'Command timed out. Please try again.'
     case 'no_project_configured':
       return 'No project configured. Register a project first.'
-    default:
-      return `Initialization failed: ${type}`
   }
 }
