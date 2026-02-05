@@ -189,7 +189,7 @@ function HealthBadge({ status, epicCount, isActive }: HealthBadgeProps) {
           <TooltipContent side="right" sideOffset={8}>
             {isActive && epicCount !== undefined
               ? `Initialized \u00B7 ${epicCount} epic${epicCount !== 1 ? 's' : ''}`
-              : 'Initialized'}
+              : 'Initialized \u00B7 switch to update'}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -269,6 +269,10 @@ interface ProjectItemProps {
 }
 
 function ProjectItem({ path, name, isActive, status, epicCount, onSelect, onRemove }: ProjectItemProps) {
+  const statusLabel = status === 'initialized'
+    ? (isActive && epicCount !== undefined ? `${epicCount} epic${epicCount !== 1 ? 's' : ''}` : 'initialized')
+    : status === 'needs-setup' ? 'needs setup' : 'error'
+
   return (
     <div
       className={cn(
@@ -280,6 +284,7 @@ function ProjectItem({ path, name, isActive, status, epicCount, onSelect, onRemo
       onClick={onSelect}
       role="button"
       tabIndex={0}
+      aria-label={`${name} \u2014 ${statusLabel}${isActive ? ' (active)' : ''}`}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
@@ -395,6 +400,14 @@ export function ProjectSwitcher({ className }: ProjectSwitcherProps) {
 
   // Fetch project context (name from package.json) for all projects
   React.useEffect(() => {
+    // Clean up ref for removed projects so re-added projects get re-fetched
+    const currentPaths = new Set(registeredProjects.map(p => p.path))
+    fetchedNamesRef.current.forEach(path => {
+      if (!currentPaths.has(path)) {
+        fetchedNamesRef.current.delete(path)
+      }
+    })
+
     const fetchNames = async () => {
       for (const project of registeredProjects) {
         // Skip if already fetched
@@ -456,14 +469,25 @@ export function ProjectSwitcher({ className }: ProjectSwitcherProps) {
         console.warn('[ProjectSwitcher] Git root detection failed, using selected path')
       }
 
-      // If git root differs from selected path, show suggestion dialog
+      // If git root differs from selected path, validate it and show suggestion dialog
       if (gitRoot && gitRoot !== selectedPath) {
-        setGitRootDialog({
-          open: true,
-          selectedPath,
-          gitRoot,
-        })
-        return
+        // Verify git root is accessible before suggesting it
+        try {
+          const validation = await window.electronAPI.flowProjectCheckStatus(gitRoot)
+          if (validation.status !== 'error') {
+            setGitRootDialog({
+              open: true,
+              selectedPath,
+              gitRoot,
+            })
+            return
+          }
+          // Git root has errors — fall through to register with selected path
+          console.warn('[ProjectSwitcher] Git root inaccessible, using selected path')
+        } catch {
+          // Validation failed — fall through to register with selected path
+          console.warn('[ProjectSwitcher] Git root validation failed, using selected path')
+        }
       }
 
       // Register with the selected path
