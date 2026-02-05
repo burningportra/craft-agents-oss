@@ -109,7 +109,7 @@ import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
 import { TasksNavigatorPanel } from "../tasks/TasksNavigatorPanel"
-import { epicWizardOpenAtom } from "@/atoms/tasks-state"
+import { epicWizardOpenAtom, activeFlowProjectAtom } from "@/atoms/tasks-state"
 import { PanelHeader } from "./PanelHeader"
 import { EditPopover, getEditConfig, type EditContextKey } from "@/components/ui/EditPopover"
 import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
@@ -511,23 +511,11 @@ function AppShellContent({
   // Window width tracking for responsive behavior
   const [windowWidth, setWindowWidth] = React.useState(window.innerWidth)
 
-  // Project path for flow-next (where .flow/ lives) - uses process.cwd() from main process
-  // Falls back to workspace.rootPath if getCwd is unavailable or fails
+  // Project path for flow-next (where .flow/ lives) — derived from activeFlowProjectAtom.
+  // Falls back to workspace.rootPath if no active flow project is set.
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId) ?? null
-  const [projectPath, setProjectPath] = React.useState<string | null>(null)
-  React.useEffect(() => {
-    if (typeof window.electronAPI?.getCwd === 'function') {
-      window.electronAPI.getCwd()
-        .then(setProjectPath)
-        .catch((err) => {
-          console.error('[AppShell] Failed to get cwd, falling back to workspace.rootPath:', err)
-          setProjectPath(activeWorkspace?.rootPath ?? null)
-        })
-    } else {
-      // getCwd not available (old preload), fall back to workspace.rootPath
-      setProjectPath(activeWorkspace?.rootPath ?? null)
-    }
-  }, [activeWorkspace?.rootPath])
+  const activeFlowProject = useAtomValue(activeFlowProjectAtom)
+  const projectPath = activeFlowProject.path ?? activeWorkspace?.rootPath ?? null
 
   // Calculate overlay threshold dynamically based on actual sidebar widths
   // Formula: 600px (300px right sidebar + 300px center) + leftSidebar + sessionList

@@ -544,6 +544,27 @@ const api: ElectronAPI = {
     priority?: 'high' | 'low'
   }) =>
     ipcRenderer.invoke(IPC_CHANNELS.FLOW_SHOW_NOTIFICATION, params),
+
+  // Flow project management (workspace-aware tasks)
+  flowProjectRegister: (projectPath: string, name: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_PROJECT_REGISTER, projectPath, name),
+  flowProjectUnregister: (projectPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_PROJECT_UNREGISTER, projectPath),
+  flowProjectList: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_PROJECT_LIST),
+  flowProjectCheckStatus: (projectPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_PROJECT_CHECK_STATUS, projectPath),
+  // Git info (lazily fetched when project is selected)
+  getGitInfo: (dirPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_GIT_INFO, dirPath),
+  // Per-project UI state persistence
+  flowUiStateRead: (projectPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_UI_STATE_READ, projectPath),
+  flowUiStateWrite: (projectPath: string, state: import('../shared/types').FlowUiState) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_UI_STATE_WRITE, projectPath, state),
+  // Project context (README.md + package.json analysis)
+  flowReadProjectContext: (projectPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_READ_PROJECT_CONTEXT, projectPath),
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

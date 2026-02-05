@@ -9,6 +9,186 @@ import { atom } from 'jotai'
 import { atomWithStorage } from 'jotai/utils'
 import { atomFamily } from 'jotai-family'
 import type { EpicSummary, TaskSummary, TaskStatus, FlowBridgeResult, EpicListResponse, TaskListResponse, CommandSuccess } from '../../shared/flow-schemas'
+import type { ActiveFlowProject, RegisteredFlowProject, FlowProjectStatus } from '../../shared/types'
+
+// ─── Flow Project Atoms ──────────────────────────────────────────────────────
+
+/**
+ * Active flow project — the currently selected project directory for tasks management.
+ * Separate from the auth Workspace concept (useActiveWorkspace).
+ * null path = no projects registered.
+ */
+export const activeFlowProjectAtom = atom<ActiveFlowProject>({
+  path: null,
+  flowStatus: 'needs-setup',
+})
+
+/**
+ * Registered flow projects — persisted to localStorage across app restarts.
+ * Shape: [{ path, name, addedAt }]
+ */
+export const registeredFlowProjectsAtom = atomWithStorage<RegisteredFlowProject[]>(
+  'flow-registered-projects',
+  []
+)
+
+/**
+ * Action atom: Set the active flow project.
+ * Fetches flow status and git info for the selected project.
+ * Handles null projectPath gracefully.
+ */
+export const setActiveFlowProjectAtom = atom(
+  null,
+  async (_get, set, projectPath: string | null) => {
+    if (!projectPath) {
+      set(activeFlowProjectAtom, { path: null, flowStatus: 'needs-setup' })
+      // Sync FlowWatcher lifecycle (teardown old watcher)
+      set(syncFlowWatcherAtom, null)
+      return
+    }
+
+    // Set path immediately with loading state
+    set(activeFlowProjectAtom, { path: projectPath, flowStatus: 'needs-setup' })
+
+    // Sync FlowWatcher lifecycle (teardown old, debounced start for new)
+    set(syncFlowWatcherAtom, projectPath)
+
+    try {
+      // Check flow status
+      const statusResult = await window.electronAPI.flowProjectCheckStatus(projectPath)
+      const flowStatus: FlowProjectStatus = statusResult.status
+
+      // Lazily fetch git info
+      const gitInfo = await window.electronAPI.getGitInfo(projectPath)
+
+      set(activeFlowProjectAtom, {
+        path: projectPath,
+        flowStatus,
+        gitInfo: gitInfo ?? undefined,
+      })
+    } catch (err) {
+      console.error('[setActiveFlowProjectAtom] Error:', err)
+      set(activeFlowProjectAtom, {
+        path: projectPath,
+        flowStatus: 'error',
+      })
+    }
+  }
+)
+
+/**
+ * Action atom: Register a new flow project.
+ * Adds to registeredFlowProjectsAtom and optionally sets as active.
+ */
+export const registerFlowProjectAtom = atom(
+  null,
+  async (get, set, projectPath: string, name: string, setActive = true) => {
+    const existing = get(registeredFlowProjectsAtom)
+
+    // Prevent duplicate registration
+    if (existing.some(p => p.path === projectPath)) {
+      if (setActive) {
+        set(setActiveFlowProjectAtom, projectPath)
+      }
+      return
+    }
+
+    const newProject: RegisteredFlowProject = {
+      path: projectPath,
+      name,
+      addedAt: Date.now(),
+    }
+
+    set(registeredFlowProjectsAtom, [...existing, newProject])
+
+    // Register on main process side
+    try {
+      await window.electronAPI.flowProjectRegister(projectPath, name)
+    } catch (err) {
+      console.error('[registerFlowProjectAtom] IPC error:', err)
+    }
+
+    if (setActive) {
+      set(setActiveFlowProjectAtom, projectPath)
+    }
+  }
+)
+
+/**
+ * Action atom: Unregister a flow project.
+ * Removes from registeredFlowProjectsAtom. Does NOT delete .flow/ on disk.
+ */
+export const unregisterFlowProjectAtom = atom(
+  null,
+  async (get, set, projectPath: string) => {
+    const existing = get(registeredFlowProjectsAtom)
+    const filtered = existing.filter(p => p.path !== projectPath)
+    set(registeredFlowProjectsAtom, filtered)
+
+    // Unregister on main process side
+    try {
+      await window.electronAPI.flowProjectUnregister(projectPath)
+    } catch (err) {
+      console.error('[unregisterFlowProjectAtom] IPC error:', err)
+    }
+
+    // If we just removed the active project, switch to first available or null
+    const active = get(activeFlowProjectAtom)
+    if (active.path === projectPath) {
+      const next = filtered.length > 0 ? filtered[0].path : null
+      set(setActiveFlowProjectAtom, next)
+    }
+  }
+)
+
+// ─── FlowWatcher Lifecycle ────────────────────────────────────────────────────
+
+// ─── FlowWatcher Lifecycle ────────────────────────────────────────────────────
+
+/** Tracks the previous project path for watcher teardown on project switch. */
+let _previousFlowProjectPath: string | null = null
+let _flowWatcherDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * Action atom: Manages FlowWatcher lifecycle on project switch.
+ * Tears down old watcher, debounces new watcher start (300ms).
+ * Called internally by setActiveFlowProjectAtom — not for external use.
+ */
+export const syncFlowWatcherAtom = atom(
+  null,
+  async (_get, _set, newPath: string | null) => {
+    // Clear any pending debounce
+    if (_flowWatcherDebounceTimer) {
+      clearTimeout(_flowWatcherDebounceTimer)
+      _flowWatcherDebounceTimer = null
+    }
+
+    const oldPath = _previousFlowProjectPath
+
+    // Tear down old watcher immediately
+    if (oldPath && oldPath !== newPath) {
+      try {
+        await window.electronAPI.flowProjectUnregister(oldPath)
+      } catch {
+        // Best-effort teardown
+      }
+    }
+
+    _previousFlowProjectPath = newPath
+
+    // Debounce new watcher start (300ms) to handle rapid switching
+    if (newPath) {
+      _flowWatcherDebounceTimer = setTimeout(async () => {
+        try {
+          // flowProjectRegister starts the watcher on main process side
+          await window.electronAPI.flowProjectRegister(newPath, '')
+        } catch {
+          // Best-effort setup
+        }
+      }, 300)
+    }
+  }
+)
 
 // ─── View Mode Types ──────────────────────────────────────────────────────────
 
@@ -288,6 +468,8 @@ export const resetTasksStateAtom = atom(
     // Clear tab state to prevent stale tabs from previous workspace
     set(openTabsAtom, [])
     set(activeTabAtom, null)
+    // Reset active project on workspace switch (project registration persists)
+    set(activeFlowProjectAtom, { path: null, flowStatus: 'needs-setup' })
   }
 )
 

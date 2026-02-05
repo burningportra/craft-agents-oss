@@ -778,7 +778,80 @@ export const IPC_CHANNELS = {
   // Flow notifications
   FLOW_NOTIFICATION_NAVIGATE: 'flow:notification-navigate',
   FLOW_SHOW_NOTIFICATION: 'flow:show-notification',
+
+  // Flow project management (workspace-aware tasks)
+  FLOW_PROJECT_REGISTER: 'flow:project-register',
+  FLOW_PROJECT_UNREGISTER: 'flow:project-unregister',
+  FLOW_PROJECT_LIST: 'flow:project-list',
+  FLOW_PROJECT_CHECK_STATUS: 'flow:project-check-status',
+  // Git info (lazily fetched when project is selected)
+  GET_GIT_INFO: 'flow:git-info',
+  // Per-project UI state persistence
+  FLOW_UI_STATE_READ: 'flow:ui-state-read',
+  FLOW_UI_STATE_WRITE: 'flow:ui-state-write',
+  // Project context (README.md + package.json analysis)
+  FLOW_READ_PROJECT_CONTEXT: 'flow:read-project-context',
 } as const
+
+// ============================================
+// Flow Project Types (Workspace-Aware Tasks)
+// ============================================
+
+/**
+ * Flow status for a registered project directory.
+ * - 'initialized': .flow/ directory exists and is valid
+ * - 'needs-setup': .flow/ directory doesn't exist yet
+ * - 'error': .flow/ exists but has errors
+ */
+export type FlowProjectStatus = 'initialized' | 'needs-setup' | 'error'
+
+/**
+ * Git repository information for a project.
+ * Lazily fetched when a project is selected.
+ */
+export interface FlowProjectGitInfo {
+  branch: string
+  remote: string
+  lastCommit: string
+}
+
+/**
+ * Registered project entry (persisted to localStorage).
+ */
+export interface RegisteredFlowProject {
+  path: string
+  name: string
+  addedAt: number
+}
+
+/**
+ * Active project state tracked by activeFlowProjectAtom.
+ */
+export interface ActiveFlowProject {
+  path: string | null
+  flowStatus: FlowProjectStatus
+  gitInfo?: FlowProjectGitInfo
+}
+
+/**
+ * Project context derived from README.md and package.json.
+ * Used for onboarding wizard contextual framing.
+ */
+export interface FlowProjectContext {
+  name: string
+  description?: string
+}
+
+/**
+ * Per-project UI state persisted to .flow/ui-state.json.
+ */
+export interface FlowUiState {
+  selectedEpicId?: string | null
+  openTabs?: string[]
+  activeTab?: string | null
+  viewModeOverrides?: Record<string, string>
+  suggestionSidebarOpen?: boolean
+}
 
 // Re-import types for ElectronAPI
 import type { Workspace, SessionMetadata, StoredAttachment as StoredAttachmentType } from '@craft-agent/core/types';
@@ -1098,6 +1171,19 @@ export interface ElectronAPI {
     taskId?: string
     priority?: 'high' | 'low'
   }): Promise<void>
+
+  // Flow project management (workspace-aware tasks)
+  flowProjectRegister(projectPath: string, name: string): Promise<{ success: boolean; error?: string }>
+  flowProjectUnregister(projectPath: string): Promise<{ success: boolean }>
+  flowProjectList(): Promise<RegisteredFlowProject[]>
+  flowProjectCheckStatus(projectPath: string): Promise<{ status: FlowProjectStatus; error?: string }>
+  // Git info (lazily fetched when project is selected)
+  getGitInfo(dirPath: string): Promise<FlowProjectGitInfo | null>
+  // Per-project UI state persistence
+  flowUiStateRead(projectPath: string): Promise<FlowUiState | null>
+  flowUiStateWrite(projectPath: string, state: FlowUiState): Promise<{ success: boolean; error?: string }>
+  // Project context (README.md + package.json analysis)
+  flowReadProjectContext(projectPath: string): Promise<FlowProjectContext | null>
 }
 
 /**

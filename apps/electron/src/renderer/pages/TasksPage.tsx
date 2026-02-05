@@ -24,7 +24,7 @@ import {
   useTaskCompletionNotifications,
   useEpicReviewReadyNotifications,
 } from '@/hooks/useFlowNotifications'
-import { epicsAtom, epicsLoadingStateAtom, activeTabAtom, openEpicTabAtom, epicWizardOpenAtom } from '@/atoms/tasks-state'
+import { epicsAtom, epicsLoadingStateAtom, activeTabAtom, openEpicTabAtom, epicWizardOpenAtom, activeFlowProjectAtom } from '@/atoms/tasks-state'
 import { navigate, routes } from '@/lib/navigate'
 
 /** Delay (ms) before showing tutorial after initialization - allows UI to settle */
@@ -38,23 +38,10 @@ export function TasksPage() {
   const activeEpicId = useAtomValue(activeTabAtom)
   const openEpicTab = useSetAtom(openEpicTabAtom)
 
-  // Project path for flow-next (where .flow/ lives) - uses process.cwd() from main process
-  // Falls back to workspace.rootPath if getCwd is unavailable or fails
-  const [projectPath, setProjectPath] = React.useState<string | null>(null)
-  React.useEffect(() => {
-    if (typeof window.electronAPI?.getCwd === 'function') {
-      window.electronAPI.getCwd()
-        .then(setProjectPath)
-        .catch((err) => {
-          console.error('[TasksPage] Failed to get cwd, falling back to workspace.rootPath:', err)
-          setProjectPath(workspace?.rootPath ?? null)
-        })
-    } else {
-      // getCwd not available (old preload), fall back to workspace.rootPath
-      console.warn('[TasksPage] getCwd not available, using workspace.rootPath')
-      setProjectPath(workspace?.rootPath ?? null)
-    }
-  }, [workspace?.rootPath])
+  // Project path for flow-next (where .flow/ lives) — derived from activeFlowProjectAtom.
+  // Falls back to workspace.rootPath if no active flow project is set.
+  const activeFlowProject = useAtomValue(activeFlowProjectAtom)
+  const projectPath = activeFlowProject.path ?? workspace?.rootPath ?? null
 
   const workspaceRoot = projectPath
   const workspaceId = workspace?.id ?? null

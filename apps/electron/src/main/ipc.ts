@@ -2574,6 +2574,9 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   }
 
+  /** Error result returned when no project path is provided to FlowBridge calls */
+  const NO_PROJECT_PATH_ERROR = { ok: false as const, error: { type: 'command_failed' as const, stderr: 'No project path configured. Register a project first.', exitCode: 1 } }
+
   function getFlowBridge(workspaceRoot: string) {
     let bridge = flowBridgeCache.get(workspaceRoot)
     if (!bridge) {
@@ -2585,46 +2588,56 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   }
 
   ipcMain.handle(IPC_CHANNELS.FLOW_EPICS_LIST, (_event, workspaceRoot: string) => {
+    if (!workspaceRoot) return NO_PROJECT_PATH_ERROR
     ensureFlowWatcher(workspaceRoot)
     return getFlowBridge(workspaceRoot).listEpics()
   })
 
   ipcMain.handle(IPC_CHANNELS.FLOW_TASKS_LIST, (_event, workspaceRoot: string, epicId: string) => {
+    if (!workspaceRoot) return NO_PROJECT_PATH_ERROR
     return getFlowBridge(workspaceRoot).listTasks(epicId)
   })
 
   ipcMain.handle(IPC_CHANNELS.FLOW_EPIC_SHOW, (_event, workspaceRoot: string, epicId: string) => {
+    if (!workspaceRoot) return NO_PROJECT_PATH_ERROR
     return getFlowBridge(workspaceRoot).showEpic(epicId)
   })
 
   ipcMain.handle(IPC_CHANNELS.FLOW_TASK_SHOW, (_event, workspaceRoot: string, taskId: string) => {
+    if (!workspaceRoot) return NO_PROJECT_PATH_ERROR
     return getFlowBridge(workspaceRoot).showTask(taskId)
   })
 
   ipcMain.handle(IPC_CHANNELS.FLOW_TASK_START, (_event, workspaceRoot: string, taskId: string) => {
+    if (!workspaceRoot) return NO_PROJECT_PATH_ERROR
     return getFlowBridge(workspaceRoot).startTask(taskId)
   })
 
   ipcMain.handle(IPC_CHANNELS.FLOW_TASK_UPDATE_STATUS, (_event, workspaceRoot: string, taskId: string, status: string) => {
+    if (!workspaceRoot) return NO_PROJECT_PATH_ERROR
     return getFlowBridge(workspaceRoot).updateTaskStatus(taskId, status as import('../shared/flow-schemas').TaskStatus)
   })
 
   ipcMain.handle(IPC_CHANNELS.FLOW_INIT, (_event, workspaceRoot: string) => {
+    if (!workspaceRoot) return NO_PROJECT_PATH_ERROR
     return getFlowBridge(workspaceRoot).init()
   })
 
   // Epic creation
   ipcMain.handle(IPC_CHANNELS.FLOW_EPIC_CREATE, (_event, workspaceRoot: string, title: string, branch?: string) => {
+    if (!workspaceRoot) return NO_PROJECT_PATH_ERROR
     return getFlowBridge(workspaceRoot).createEpic(title, branch)
   })
 
   // Epic plan update (for Standard/Complex templates with full spec)
   ipcMain.handle(IPC_CHANNELS.FLOW_EPIC_SET_PLAN, (_event, workspaceRoot: string, epicId: string, content: string) => {
+    if (!workspaceRoot) return NO_PROJECT_PATH_ERROR
     return getFlowBridge(workspaceRoot).setEpicPlan(epicId, content)
   })
 
   // Epic deletion
   ipcMain.handle(IPC_CHANNELS.FLOW_EPIC_DELETE, (_event, workspaceRoot: string, epicId: string) => {
+    if (!workspaceRoot) return NO_PROJECT_PATH_ERROR
     return getFlowBridge(workspaceRoot).deleteEpic(epicId)
   })
 
@@ -2648,6 +2661,177 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       taskId: params.taskId,
       priority: params.priority,
     })
+  })
+
+  // ─── Flow project management (workspace-aware tasks) ─────────────────
+
+  ipcMain.handle(IPC_CHANNELS.FLOW_PROJECT_REGISTER, (_event, projectPath: string, name: string) => {
+    try {
+      // Validate path exists
+      if (!existsSync(projectPath)) {
+        return { success: false, error: `Path does not exist: ${projectPath}` }
+      }
+      // Ensure FlowWatcher is started for the registered project
+      ensureFlowWatcher(projectPath)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.FLOW_PROJECT_UNREGISTER, (_event, projectPath: string) => {
+    // Stop the FlowWatcher for this project
+    stopFlowWatcher(projectPath)
+    // Remove FlowBridge from cache
+    flowBridgeCache.delete(projectPath)
+    return { success: true }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.FLOW_PROJECT_LIST, () => {
+    // Project list is managed on the renderer side via localStorage.
+    // This handler exists for future use (e.g., validating paths still exist).
+    return []
+  })
+
+  ipcMain.handle(IPC_CHANNELS.FLOW_PROJECT_CHECK_STATUS, (_event, projectPath: string) => {
+    try {
+      if (!projectPath) {
+        return { status: 'error' as const, error: 'No project path provided' }
+      }
+      const flowDir = join(projectPath, '.flow')
+      if (existsSync(flowDir)) {
+        return { status: 'initialized' as const }
+      }
+      return { status: 'needs-setup' as const }
+    } catch (err) {
+      return { status: 'error' as const, error: err instanceof Error ? err.message : 'Unknown error' }
+    }
+  })
+
+  // Git info (lazily fetched when project is selected)
+  ipcMain.handle(IPC_CHANNELS.GET_GIT_INFO, (_event, dirPath: string) => {
+    if (!dirPath) return null
+    try {
+      const branch = execSync('git rev-parse --abbrev-ref HEAD', {
+        cwd: dirPath,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 5000,
+      }).trim()
+
+      let remote = ''
+      try {
+        remote = execSync('git remote get-url origin', {
+          cwd: dirPath,
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+          timeout: 5000,
+        }).trim()
+      } catch {
+        // No remote configured
+      }
+
+      let lastCommit = ''
+      try {
+        lastCommit = execSync('git log -1 --format=%H', {
+          cwd: dirPath,
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+          timeout: 5000,
+        }).trim()
+      } catch {
+        // No commits yet
+      }
+
+      return { branch: branch || '', remote, lastCommit }
+    } catch {
+      // Not a git repo, git not installed, or other error
+      return null
+    }
+  })
+
+  // Per-project UI state persistence
+  ipcMain.handle(IPC_CHANNELS.FLOW_UI_STATE_READ, async (_event, projectPath: string) => {
+    if (!projectPath) return null
+    try {
+      const statePath = join(projectPath, '.flow', 'ui-state.json')
+      if (!existsSync(statePath)) return null
+      const content = await readFile(statePath, 'utf-8')
+      return JSON.parse(content)
+    } catch {
+      return null
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.FLOW_UI_STATE_WRITE, async (_event, projectPath: string, state: Record<string, unknown>) => {
+    if (!projectPath) return { success: false, error: 'No project path' }
+    try {
+      const flowDir = join(projectPath, '.flow')
+      if (!existsSync(flowDir)) {
+        return { success: false, error: '.flow/ directory does not exist' }
+      }
+      const statePath = join(flowDir, 'ui-state.json')
+      await writeFile(statePath, JSON.stringify(state, null, 2), 'utf-8')
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
+    }
+  })
+
+  // Project context (README.md + package.json analysis)
+  ipcMain.handle(IPC_CHANNELS.FLOW_READ_PROJECT_CONTEXT, async (_event, projectPath: string) => {
+    if (!projectPath) return null
+    try {
+      let name = basename(projectPath) // fallback: directory basename
+
+      // Try to read package.json for project name
+      const pkgPath = join(projectPath, 'package.json')
+      if (existsSync(pkgPath)) {
+        try {
+          const pkgContent = await readFile(pkgPath, 'utf-8')
+          const pkg = JSON.parse(pkgContent)
+          if (pkg.name && typeof pkg.name === 'string') {
+            name = pkg.name
+          }
+        } catch {
+          // Invalid JSON or unreadable — use basename
+        }
+      }
+
+      // Try to read description from README.md
+      let description: string | undefined
+      const readmePath = join(projectPath, 'README.md')
+      if (existsSync(readmePath)) {
+        try {
+          const readmeContent = await readFile(readmePath, 'utf-8')
+          // Extract first paragraph (skip title line)
+          const lines = readmeContent.split('\n')
+          const descLines: string[] = []
+          let pastTitle = false
+          for (const line of lines) {
+            const trimmed = line.trim()
+            if (!pastTitle) {
+              if (trimmed.startsWith('#') || trimmed === '') continue
+              pastTitle = true
+            }
+            if (pastTitle) {
+              if (trimmed === '' && descLines.length > 0) break
+              if (trimmed.startsWith('#')) break
+              descLines.push(trimmed)
+            }
+          }
+          if (descLines.length > 0) {
+            description = descLines.join(' ').slice(0, 300)
+          }
+        } catch {
+          // Unreadable — skip description
+        }
+      }
+
+      return { name, description }
+    } catch {
+      return null
+    }
   })
 
 }
