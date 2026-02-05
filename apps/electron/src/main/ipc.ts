@@ -1,6 +1,6 @@
 import { app, ipcMain, nativeTheme, nativeImage, dialog, shell, BrowserWindow } from 'electron'
 import { readFile, readdir, stat, realpath, mkdir, writeFile, unlink, rm } from 'fs/promises'
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs'
 import { normalize, isAbsolute, join, basename, dirname, resolve, relative, sep } from 'path'
 import { homedir, tmpdir } from 'os'
 import { randomUUID } from 'crypto'
@@ -38,6 +38,48 @@ function sanitizeFilename(name: string): string {
     .slice(0, 200)
     // Fallback if name is empty after sanitization
     || 'unnamed'
+}
+
+/**
+ * Validates a project path for flow-next operations.
+ * Prevents path traversal attacks and ensures the path is a valid directory.
+ */
+function validateProjectPath(projectPath: string): { valid: boolean; error?: string } {
+  if (!projectPath || typeof projectPath !== 'string') {
+    return { valid: false, error: 'Invalid project path' }
+  }
+
+  // Resolve to absolute path to prevent traversal
+  const resolved = resolve(projectPath)
+
+  // Must be an absolute path
+  if (!isAbsolute(resolved)) {
+    return { valid: false, error: 'Path must be absolute' }
+  }
+
+  // Block access to system directories
+  const systemDirs = process.platform === 'win32'
+    ? ['C:\\Windows', 'C:\\Program Files', 'C:\\Program Files (x86)']
+    : ['/etc', '/sys', '/proc', '/dev', '/boot', '/sbin', '/usr/sbin']
+  if (systemDirs.some(dir => resolved.toLowerCase().startsWith(dir.toLowerCase()))) {
+    return { valid: false, error: 'System directories are not allowed' }
+  }
+
+  // Verify it exists and is a directory
+  if (!existsSync(resolved)) {
+    return { valid: false, error: 'Path does not exist' }
+  }
+
+  try {
+    const stats = statSync(resolved)
+    if (!stats.isDirectory()) {
+      return { valid: false, error: 'Path is not a directory' }
+    }
+  } catch {
+    return { valid: false, error: 'Cannot access path' }
+  }
+
+  return { valid: true }
 }
 
 /**
@@ -2575,7 +2617,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   }
 
   /** Error result returned when no project path is provided to FlowBridge calls */
-  const NO_PROJECT_PATH_ERROR = { ok: false as const, error: { type: 'command_failed' as const, stderr: 'No project path configured. Register a project first.', exitCode: 1 } }
+  const NO_PROJECT_PATH_ERROR = { ok: false as const, error: { type: 'no_project_configured' as const } }
 
   function getFlowBridge(workspaceRoot: string) {
     let bridge = flowBridgeCache.get(workspaceRoot)
@@ -2666,13 +2708,13 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   // ─── Flow project management (workspace-aware tasks) ─────────────────
 
   ipcMain.handle(IPC_CHANNELS.FLOW_PROJECT_REGISTER, (_event, projectPath: string, name: string) => {
+    const validation = validateProjectPath(projectPath)
+    if (!validation.valid) {
+      return { success: false, error: validation.error }
+    }
     try {
-      // Validate path exists
-      if (!existsSync(projectPath)) {
-        return { success: false, error: `Path does not exist: ${projectPath}` }
-      }
       // Ensure FlowWatcher is started for the registered project
-      ensureFlowWatcher(projectPath)
+      ensureFlowWatcher(resolve(projectPath))
       return { success: true }
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
@@ -2688,17 +2730,20 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   ipcMain.handle(IPC_CHANNELS.FLOW_PROJECT_LIST, () => {
-    // Project list is managed on the renderer side via localStorage.
-    // This handler exists for future use (e.g., validating paths still exist).
+    // TODO(fn-3): Validate registered projects still exist on disk.
+    // Currently projects are only stored in localStorage on renderer side.
+    // This handler exists as a placeholder for future path validation.
     return []
   })
 
   ipcMain.handle(IPC_CHANNELS.FLOW_PROJECT_CHECK_STATUS, (_event, projectPath: string) => {
+    const validation = validateProjectPath(projectPath)
+    if (!validation.valid) {
+      return { status: 'error' as const, error: validation.error }
+    }
     try {
-      if (!projectPath) {
-        return { status: 'error' as const, error: 'No project path provided' }
-      }
-      const flowDir = join(projectPath, '.flow')
+      const resolved = resolve(projectPath)
+      const flowDir = join(resolved, '.flow')
       if (existsSync(flowDir)) {
         return { status: 'initialized' as const }
       }
@@ -2710,10 +2755,12 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Git info (lazily fetched when project is selected)
   ipcMain.handle(IPC_CHANNELS.GET_GIT_INFO, (_event, dirPath: string) => {
-    if (!dirPath) return null
+    const validation = validateProjectPath(dirPath)
+    if (!validation.valid) return null
+    const resolvedDir = resolve(dirPath)
     try {
       const branch = execSync('git rev-parse --abbrev-ref HEAD', {
-        cwd: dirPath,
+        cwd: resolvedDir,
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],
         timeout: 5000,
@@ -2722,7 +2769,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       let remote = ''
       try {
         remote = execSync('git remote get-url origin', {
-          cwd: dirPath,
+          cwd: resolvedDir,
           encoding: 'utf-8',
           stdio: ['pipe', 'pipe', 'pipe'],
           timeout: 5000,
@@ -2734,7 +2781,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       let lastCommit = ''
       try {
         lastCommit = execSync('git log -1 --format=%H', {
-          cwd: dirPath,
+          cwd: resolvedDir,
           encoding: 'utf-8',
           stdio: ['pipe', 'pipe', 'pipe'],
           timeout: 5000,
@@ -2752,9 +2799,11 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Per-project UI state persistence
   ipcMain.handle(IPC_CHANNELS.FLOW_UI_STATE_READ, async (_event, projectPath: string) => {
-    if (!projectPath) return null
+    const validation = validateProjectPath(projectPath)
+    if (!validation.valid) return null
     try {
-      const statePath = join(projectPath, '.flow', 'ui-state.json')
+      const resolved = resolve(projectPath)
+      const statePath = join(resolved, '.flow', 'ui-state.json')
       if (!existsSync(statePath)) return null
       const content = await readFile(statePath, 'utf-8')
       return JSON.parse(content)
@@ -2764,9 +2813,11 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   ipcMain.handle(IPC_CHANNELS.FLOW_UI_STATE_WRITE, async (_event, projectPath: string, state: Record<string, unknown>) => {
-    if (!projectPath) return { success: false, error: 'No project path' }
+    const validation = validateProjectPath(projectPath)
+    if (!validation.valid) return { success: false, error: validation.error }
     try {
-      const flowDir = join(projectPath, '.flow')
+      const resolved = resolve(projectPath)
+      const flowDir = join(resolved, '.flow')
       if (!existsSync(flowDir)) {
         return { success: false, error: '.flow/ directory does not exist' }
       }
@@ -2780,12 +2831,14 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
   // Project context (README.md + package.json analysis)
   ipcMain.handle(IPC_CHANNELS.FLOW_READ_PROJECT_CONTEXT, async (_event, projectPath: string) => {
-    if (!projectPath) return null
+    const validation = validateProjectPath(projectPath)
+    if (!validation.valid) return null
+    const resolved = resolve(projectPath)
     try {
-      let name = basename(projectPath) // fallback: directory basename
+      let name = basename(resolved) // fallback: directory basename
 
       // Try to read package.json for project name
-      const pkgPath = join(projectPath, 'package.json')
+      const pkgPath = join(resolved, 'package.json')
       if (existsSync(pkgPath)) {
         try {
           const pkgContent = await readFile(pkgPath, 'utf-8')
@@ -2800,7 +2853,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
 
       // Try to read description from README.md
       let description: string | undefined
-      const readmePath = join(projectPath, 'README.md')
+      const readmePath = join(resolved, 'README.md')
       if (existsSync(readmePath)) {
         try {
           const readmeContent = await readFile(readmePath, 'utf-8')

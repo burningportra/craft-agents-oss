@@ -71,6 +71,7 @@ export const setActiveFlowProjectAtom = atom(
       set(activeFlowProjectAtom, {
         path: projectPath,
         flowStatus: 'error',
+        error: err instanceof Error ? err.message : 'Unknown error',
       })
     }
   }
@@ -101,13 +102,8 @@ export const registerFlowProjectAtom = atom(
 
     set(registeredFlowProjectsAtom, [...existing, newProject])
 
-    // Register on main process side
-    try {
-      await window.electronAPI.flowProjectRegister(projectPath, name)
-    } catch (err) {
-      console.error('[registerFlowProjectAtom] IPC error:', err)
-    }
-
+    // FlowWatcher lifecycle is managed solely by setActiveFlowProjectAtom → syncFlowWatcherAtom.
+    // No direct IPC registration call here to avoid double-registration race condition.
     if (setActive) {
       set(setActiveFlowProjectAtom, projectPath)
     }
@@ -145,25 +141,34 @@ export const unregisterFlowProjectAtom = atom(
 
 // ─── FlowWatcher Lifecycle ────────────────────────────────────────────────────
 
-/** Tracks the previous project path for watcher teardown on project switch. */
-let _previousFlowProjectPath: string | null = null
-let _flowWatcherDebounceTimer: ReturnType<typeof setTimeout> | null = null
+/**
+ * Internal atom tracking FlowWatcher state.
+ * Uses Jotai state instead of module-level variables to survive HMR correctly.
+ */
+const flowWatcherInternalAtom = atom<{
+  previousPath: string | null
+  debounceTimer: ReturnType<typeof setTimeout> | null
+}>({
+  previousPath: null,
+  debounceTimer: null,
+})
 
 /**
  * Action atom: Manages FlowWatcher lifecycle on project switch.
  * Tears down old watcher, debounces new watcher start (300ms).
- * Called internally by setActiveFlowProjectAtom — not for external use.
+ * Called internally by setActiveFlowProjectAtom -- not for external use.
  */
 export const syncFlowWatcherAtom = atom(
   null,
-  async (_get, _set, newPath: string | null) => {
+  async (get, set, newPath: string | null) => {
+    const state = get(flowWatcherInternalAtom)
+
     // Clear any pending debounce
-    if (_flowWatcherDebounceTimer) {
-      clearTimeout(_flowWatcherDebounceTimer)
-      _flowWatcherDebounceTimer = null
+    if (state.debounceTimer) {
+      clearTimeout(state.debounceTimer)
     }
 
-    const oldPath = _previousFlowProjectPath
+    const oldPath = state.previousPath
 
     // Tear down old watcher immediately
     if (oldPath && oldPath !== newPath) {
@@ -174,19 +179,22 @@ export const syncFlowWatcherAtom = atom(
       }
     }
 
-    _previousFlowProjectPath = newPath
-
     // Debounce new watcher start (300ms) to handle rapid switching
-    if (newPath) {
-      _flowWatcherDebounceTimer = setTimeout(async () => {
-        try {
-          // flowProjectRegister starts the watcher on main process side
-          await window.electronAPI.flowProjectRegister(newPath, '')
-        } catch {
-          // Best-effort setup
-        }
-      }, 300)
-    }
+    const newTimer = newPath
+      ? setTimeout(async () => {
+          try {
+            // flowProjectRegister starts the watcher on main process side
+            await window.electronAPI.flowProjectRegister(newPath, '')
+          } catch {
+            // Best-effort setup
+          }
+        }, 300)
+      : null
+
+    set(flowWatcherInternalAtom, {
+      previousPath: newPath,
+      debounceTimer: newTimer,
+    })
   }
 )
 
@@ -368,7 +376,9 @@ export const loadEpicsAtom = atom(
       } else {
         // Handle error
         let errorMsg = 'Failed to load epics'
-        if (result.error.type === 'flowctl_not_found') {
+        if (result.error.type === 'no_project_configured') {
+          errorMsg = 'no-project-configured'
+        } else if (result.error.type === 'flowctl_not_found') {
           errorMsg = 'flowctl not found - .flow/ may not be initialized'
         } else if (result.error.type === 'command_failed') {
           // Check if it's "no .flow directory" error - use specific exit code
@@ -468,7 +478,7 @@ export const resetTasksStateAtom = atom(
     // Clear tab state to prevent stale tabs from previous workspace
     set(openTabsAtom, [])
     set(activeTabAtom, null)
-    // Reset active project on workspace switch (project registration persists)
+    // Reset active flow project to prevent cross-workspace bugs (project registration persists in localStorage)
     set(activeFlowProjectAtom, { path: null, flowStatus: 'needs-setup' })
   }
 )

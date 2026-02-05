@@ -831,6 +831,8 @@ export interface ActiveFlowProject {
   path: string | null
   flowStatus: FlowProjectStatus
   gitInfo?: FlowProjectGitInfo
+  /** Error message when flowStatus is 'error' */
+  error?: string
 }
 
 /**

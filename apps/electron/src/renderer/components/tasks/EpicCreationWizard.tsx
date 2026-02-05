@@ -58,6 +58,8 @@ function getFlowBridgeErrorMessage(error: FlowBridgeError): string {
       return error.stderr || 'Flow command failed.'
     case 'timeout':
       return 'Command timed out. Please try again.'
+    case 'no_project_configured':
+      return 'No project configured. Register a project first.'
   }
 }
 

@@ -139,6 +139,7 @@ export type FlowBridgeError =
   | { type: 'invalid_output'; zodError: z.ZodError }
   | { type: 'command_failed'; stderr: string; exitCode: number }
   | { type: 'timeout'; command: string }
+  | { type: 'no_project_configured' }
 
 export type FlowBridgeResult<T> =
   | { ok: true; data: T }

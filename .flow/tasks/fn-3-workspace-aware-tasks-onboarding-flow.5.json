@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-02-05T01:54:40.646365Z",
+  "depends_on": [
+    "fn-3-workspace-aware-tasks-onboarding-flow.4"
+  ],
+  "epic": "fn-3-workspace-aware-tasks-onboarding-flow",
+  "id": "fn-3-workspace-aware-tasks-onboarding-flow.5",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-3-workspace-aware-tasks-onboarding-flow.5.md",
+  "status": "todo",
+  "title": "Onboarding Wizard Steps 3-5",
+  "updated_at": "2026-02-05T02:09:16.573363Z"
+}
