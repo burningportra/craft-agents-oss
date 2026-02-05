@@ -50,9 +50,8 @@ Implement the brief welcome banner for cloned repos, polished empty states, and 
 - [ ] Monorepo: `.flow/` only checked at exact registered project path
 - [ ] App typechecks and lints clean
 ## Done summary
-TBD
-
+Implemented brief welcome banner for cloned repos, polished no-projects empty state with Add a Project CTA, and .flow/ deletion detection with re-init banner. Extracted shared useAddProject hook from ProjectSwitcher for reuse, extended FlowUiState with welcomeDismissed persistence, and integrated all components into TasksPage with proper conditional rendering and state management.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 96a894f1ba0f62b5dbbe2c63e3e0c757d52278c2
+- Tests: cd apps/electron && bun run typecheck, cd apps/electron && bun run lint
 - PRs:
