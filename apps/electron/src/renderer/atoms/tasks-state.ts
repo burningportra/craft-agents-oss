@@ -317,12 +317,19 @@ const uiStatePersistTimerAtom = atom<ReturnType<typeof setTimeout> | null>(null)
 const uiStateMigrationDoneAtom = atom<boolean>(false)
 
 /**
+ * Tracks whether the welcome banner has been dismissed for the current project.
+ * Persisted to .flow/ui-state.json as `welcomeDismissed`.
+ */
+export const welcomeDismissedAtom = atom<boolean>(false)
+
+/**
  * Collects current UI state from atoms into a FlowUiState object.
  */
 const collectUiStateAtom = atom((get): FlowUiState => {
   const openTabs = get(openTabsAtom)
   const activeTab = get(activeTabAtom)
   const viewModeMap = get(viewModeMapAtom)
+  const welcomeDismissed = get(welcomeDismissedAtom)
 
   // Only include non-null view mode entries
   const viewModePerEpic: Record<string, string> = {}
@@ -336,6 +343,7 @@ const collectUiStateAtom = atom((get): FlowUiState => {
     openTabs,
     activeTab,
     viewModePerEpic,
+    welcomeDismissed: welcomeDismissed || undefined,
   }
 })
 
@@ -473,6 +481,7 @@ function parseUiState(state: FlowUiState): {
   activeTab: string | null
   selectedEpicId: string | null
   viewModeMap: Record<string, ViewMode | null>
+  welcomeDismissed: boolean
 } {
   const viewModeMap: Record<string, ViewMode | null> = {}
   if (state.viewModePerEpic) {
@@ -485,6 +494,7 @@ function parseUiState(state: FlowUiState): {
     activeTab: state.activeTab ?? null,
     selectedEpicId: state.activeTab ?? null, // selectedEpicId mirrors activeTab
     viewModeMap,
+    welcomeDismissed: state.welcomeDismissed ?? false,
   }
 }
 
@@ -520,6 +530,7 @@ export const hydrateUiStateAtom = atom(
         set(activeTabAtom, parsed.activeTab)
         set(selectedEpicIdAtom, parsed.selectedEpicId)
         set(viewModeMapAtom, parsed.viewModeMap)
+        set(welcomeDismissedAtom, parsed.welcomeDismissed)
         set(uiStateMigrationDoneAtom, true)
         return
       }
@@ -532,6 +543,7 @@ export const hydrateUiStateAtom = atom(
         set(activeTabAtom, null)
         set(selectedEpicIdAtom, null)
         set(viewModeMapAtom, {})
+        set(welcomeDismissedAtom, false)
         set(uiStateMigrationDoneAtom, true)
         return
       }
@@ -546,6 +558,7 @@ export const hydrateUiStateAtom = atom(
           set(activeTabAtom, parsed.activeTab)
           set(selectedEpicIdAtom, parsed.selectedEpicId)
           set(viewModeMapAtom, parsed.viewModeMap)
+          set(welcomeDismissedAtom, parsed.welcomeDismissed)
 
           // Persist to .flow/ui-state.json
           try {
@@ -568,6 +581,7 @@ export const hydrateUiStateAtom = atom(
       set(activeTabAtom, null)
       set(selectedEpicIdAtom, null)
       set(viewModeMapAtom, {})
+      set(welcomeDismissedAtom, false)
       set(uiStateMigrationDoneAtom, true)
     } catch (err) {
       console.error('[hydrateUiStateAtom] Error:', err)
@@ -576,6 +590,7 @@ export const hydrateUiStateAtom = atom(
       set(activeTabAtom, null)
       set(selectedEpicIdAtom, null)
       set(viewModeMapAtom, {})
+      set(welcomeDismissedAtom, false)
       set(uiStateMigrationDoneAtom, true)
     }
   }
@@ -820,6 +835,7 @@ export const resetTasksStateAtom = atom(
     set(openTabsAtom, [])
     set(activeTabAtom, null)
     set(viewModeMapAtom, {})
+    set(welcomeDismissedAtom, false)
     // Reset migration flag so next project hydration can migrate if needed
     set(uiStateMigrationDoneAtom, false)
     // Reset active flow project to prevent cross-workspace bugs (project registration persists in localStorage)
@@ -901,6 +917,18 @@ export const setActiveTabAtom = atom(
       // Persist
       set(scheduleUiStatePersistAtom)
     }
+  }
+)
+
+/**
+ * Action atom: Dismiss the welcome banner for the current project.
+ * Sets welcomeDismissed to true and schedules a debounced persist.
+ */
+export const dismissWelcomeBannerAtom = atom(
+  null,
+  (_get, set) => {
+    set(welcomeDismissedAtom, true)
+    set(scheduleUiStatePersistAtom)
   }
 )
 

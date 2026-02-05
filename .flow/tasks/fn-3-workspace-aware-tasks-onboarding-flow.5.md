@@ -54,9 +54,8 @@ Implement the remaining onboarding wizard steps: Configure (3), Initialize (4), 
 - [ ] `canvas-confetti` added to `apps/electron/package.json` dependencies
 - [ ] App typechecks and lints clean
 ## Done summary
-TBD
-
+Implemented OnboardingWizard steps 3-5: Configure (view mode selector with kanban default), Initialize (flowctl init with progress spinner, auto-advance, error handling with retry/cancel), and Create Epic + Celebrate (embedded EpicCreationWizard, canvas-confetti with prefers-reduced-motion respect, summary card, Get Started button). All steps individually skippable. Added canvas-confetti dependency. Review fixes addressed memory leak, view mode persistence, re-entry bug, and error type safety.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: eec4597, a26bf83
+- Tests: cd apps/electron && bun run typecheck, cd apps/electron && bun run lint
 - PRs:

@@ -22,16 +22,15 @@ import {
   activeFlowProjectAtom,
   registeredFlowProjectsAtom,
   setActiveFlowProjectAtom,
-  registerFlowProjectAtom,
   unregisterFlowProjectAtom,
   epicsAtom,
 } from '@/atoms/tasks-state'
+import { useAddProject } from '@/hooks/useAddProject'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   StyledDropdownMenuContent,
   StyledDropdownMenuItem,
-  StyledDropdownMenuSeparator,
 } from '@/components/ui/styled-dropdown'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@craft-agent/ui'
 import {
@@ -360,19 +359,20 @@ export function ProjectSwitcher({ className }: ProjectSwitcherProps) {
   const registeredProjects = useAtomValue(registeredFlowProjectsAtom)
   const activeProject = useAtomValue(activeFlowProjectAtom)
   const setActiveProject = useSetAtom(setActiveFlowProjectAtom)
-  const registerProject = useSetAtom(registerFlowProjectAtom)
   const unregisterProject = useSetAtom(unregisterFlowProjectAtom)
   const epics = useAtomValue(epicsAtom)
 
+  // Shared add-project hook (replaces local handleAddProject + git root dialog)
+  const {
+    handleAddProject,
+    gitRootDialog,
+    setGitRootDialogOpen,
+    handleUseGitRoot,
+    handleUseSelected,
+  } = useAddProject()
+
   // Per-project status cache (only live-update active project, stale for inactive)
   const [statusCache, setStatusCache] = React.useState<Record<string, FlowProjectStatus>>({})
-
-  // Git root suggestion dialog state
-  const [gitRootDialog, setGitRootDialog] = React.useState<{
-    open: boolean
-    selectedPath: string
-    gitRoot: string
-  }>({ open: false, selectedPath: '', gitRoot: '' })
 
   // Fetch project names from package.json / project context for display
   const [projectNames, setProjectNames] = React.useState<Record<string, string>>({})
@@ -438,79 +438,6 @@ export function ProjectSwitcher({ className }: ProjectSwitcherProps) {
     return statusCache[path] || 'needs-setup'
   }, [activeProject, statusCache])
 
-  /** Register a project at the given path */
-  const registerWithPath = React.useCallback(async (path: string) => {
-    // Try to get a name from project context
-    let name = getBasename(path)
-    try {
-      const context = await window.electronAPI.flowReadProjectContext(path)
-      if (context?.name) {
-        name = context.name
-      }
-    } catch {
-      // Use basename fallback
-    }
-
-    await registerProject(path, name, true)
-  }, [registerProject])
-
-  /** Handle adding a new project via folder picker */
-  const handleAddProject = React.useCallback(async () => {
-    try {
-      const selectedPath = await window.electronAPI.openFolderDialog()
-      if (!selectedPath) return // User cancelled
-
-      // Detect git root
-      let gitRoot: string | null = null
-      try {
-        gitRoot = await window.electronAPI.getGitRoot(selectedPath)
-      } catch {
-        // Git not available or not a repo — proceed with selected path
-        console.warn('[ProjectSwitcher] Git root detection failed, using selected path')
-      }
-
-      // If git root differs from selected path, validate it and show suggestion dialog
-      if (gitRoot && gitRoot !== selectedPath) {
-        // Verify git root is accessible before suggesting it
-        try {
-          const validation = await window.electronAPI.flowProjectCheckStatus(gitRoot)
-          if (validation.status !== 'error') {
-            setGitRootDialog({
-              open: true,
-              selectedPath,
-              gitRoot,
-            })
-            return
-          }
-          // Git root has errors — fall through to register with selected path
-          console.warn('[ProjectSwitcher] Git root inaccessible, using selected path')
-        } catch {
-          // Validation failed — fall through to register with selected path
-          console.warn('[ProjectSwitcher] Git root validation failed, using selected path')
-        }
-      }
-
-      // Register with the selected path
-      await registerWithPath(selectedPath)
-    } catch (err) {
-      console.error('[ProjectSwitcher] Failed to add project:', err)
-    }
-  }, [registerWithPath])
-
-  /** Handle git root dialog: use git root */
-  const handleUseGitRoot = React.useCallback(async () => {
-    const { gitRoot } = gitRootDialog
-    setGitRootDialog(prev => ({ ...prev, open: false }))
-    await registerWithPath(gitRoot)
-  }, [gitRootDialog, registerWithPath])
-
-  /** Handle git root dialog: use selected folder */
-  const handleUseSelected = React.useCallback(async () => {
-    const { selectedPath } = gitRootDialog
-    setGitRootDialog(prev => ({ ...prev, open: false }))
-    await registerWithPath(selectedPath)
-  }, [gitRootDialog, registerWithPath])
-
   if (registeredProjects.length === 0) {
     return (
       <div className={cn('px-2', className)}>
@@ -527,7 +454,7 @@ export function ProjectSwitcher({ className }: ProjectSwitcherProps) {
 
         <GitRootDialog
           open={gitRootDialog.open}
-          onOpenChange={(open) => setGitRootDialog(prev => ({ ...prev, open }))}
+          onOpenChange={setGitRootDialogOpen}
           selectedPath={gitRootDialog.selectedPath}
           gitRoot={gitRootDialog.gitRoot}
           onUseGitRoot={handleUseGitRoot}
@@ -576,7 +503,7 @@ export function ProjectSwitcher({ className }: ProjectSwitcherProps) {
 
       <GitRootDialog
         open={gitRootDialog.open}
-        onOpenChange={(open) => setGitRootDialog(prev => ({ ...prev, open }))}
+        onOpenChange={setGitRootDialogOpen}
         selectedPath={gitRootDialog.selectedPath}
         gitRoot={gitRootDialog.gitRoot}
         onUseGitRoot={handleUseGitRoot}

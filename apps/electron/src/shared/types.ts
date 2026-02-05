@@ -857,6 +857,8 @@ export interface FlowUiState {
   openTabs?: string[]
   activeTab?: string | null
   viewModePerEpic?: Record<string, string>
+  /** Whether the brief welcome banner has been dismissed for this project */
+  welcomeDismissed?: boolean
 }
 
 // Re-import types for ElectronAPI
