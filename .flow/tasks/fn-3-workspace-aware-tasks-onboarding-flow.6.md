@@ -17,7 +17,7 @@ Implement the brief welcome banner for cloned repos, polished empty states, and 
 - **Empty state (no projects)**:
   - When `registeredFlowProjectsAtom` is empty: show polished empty state in Tasks view
   - Explain the project concept with illustration
-  - CTA: "Add a Project" button → calls the same handler as sidebar's `+ Add Project` (from Task 3). Import and reuse the handler function.
+  - CTA: "Add a Project" button → should behave identically to sidebar's `+ Add Project` (from Task 3). The handler logic in `ProjectSwitcher.tsx` is a local `useCallback` (`handleAddProject`) and is NOT exported. Either extract the shared logic (folder dialog + git root detection + `registerFlowProjectAtom`) into a reusable hook/atom, or re-compose from: `window.electronAPI.openFolderDialog()`, `window.electronAPI.getGitRoot(path)`, `window.electronAPI.flowProjectCheckStatus(path)`, `window.electronAPI.flowReadProjectContext(path)`, and `registerFlowProjectAtom`. The git root suggestion dialog (`GitRootDialog` sub-component) is also local to `ProjectSwitcher.tsx`.
   - Follow existing `Empty` compound component pattern from `TasksEmptyState.tsx`
 - **`.flow/` deletion detection**:
   - FlowWatcher at `flow-watcher.ts:99-105` already handles this (`syncFlowWatcherAtom` action atom from Task 1 manages watcher lifecycle; not an atom effect but an action atom called by `setActiveFlowProjectAtom`)
@@ -32,7 +32,8 @@ Implement the brief welcome banner for cloned repos, polished empty states, and 
 - FlowWatcher's `.flow/` deletion handling (`flow-watcher.ts:99-105`) falls back to parent directory watching
 <!-- Updated by plan-sync: fn-3...1 used activeFlowProjectAtom/registeredFlowProjectsAtom (not activeProjectAtom/registeredProjectsAtom). Action atoms: registerFlowProjectAtom, unregisterFlowProjectAtom, setActiveFlowProjectAtom. Old tutorial removal moved to Task 4. -->
 <!-- Updated by plan-sync: fn-3...2 already implemented auto-open most active epic logic in loadEpicsAtom (tasks-state.ts ~L674-686) via findMostActiveEpic(). When no ui-state.json exists and no tab is selected, loadEpicsAtom auto-opens the most active epic using the same tiebreaker (in-progress count → updated_at → epic ID). Task 6 should NOT re-implement this — focus only on the brief welcome banner UI overlay. The auto-open fires automatically from the existing hydration + epic-load path. -->
-- Task 3's `ProjectSwitcher` has the `+ Add Project` handler — reuse it via shared function/atom
+- Task 3's `ProjectSwitcher` has the `+ Add Project` handler — but it is a local `useCallback` (`handleAddProject` at line 458), NOT exported. It calls `openFolderDialog()` → `getGitRoot()` → shows `GitRootDialog` (local sub-component) if git root differs → `registerFlowProjectAtom`. To reuse, extract into a shared hook or re-compose from underlying APIs.
+<!-- Updated by plan-sync: fn-3...3 — handleAddProject is a local useCallback inside ProjectSwitcher, not a shared function/atom. GitRootDialog is also a local sub-component. Reuse requires extraction or re-composition from underlying IPC calls + registerFlowProjectAtom. -->
 - Old tutorial removal (OnboardingTutorial.tsx + KEYS.flowTasksOnboardingComplete) is handled in Task 4, not Task 6
 - Auto-open most active epic is already implemented in `loadEpicsAtom` (Task 2) — the brief welcome banner is additive UI on top of existing auto-open behavior
 - `FlowUiState` type (in `types.ts`) currently has `{ openTabs?, activeTab?, viewModePerEpic? }` — Task 6 needs to extend it with `welcomeDismissed?: boolean`

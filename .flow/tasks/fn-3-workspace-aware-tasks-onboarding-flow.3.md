@@ -47,9 +47,8 @@ Add a project switcher component to the sidebar that shows registered projects w
 - [ ] Component follows existing sidebar patterns
 - [ ] App typechecks and lints clean
 ## Done summary
-TBD
-
+Created ProjectSwitcher sidebar component with colored avatars (deterministic hash-based color), health badges, git root auto-detection dialog, add/remove project actions, and integrated it into AppShell sidebar. Added GET_GIT_ROOT IPC channel for git rev-parse --show-toplevel.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 19a732f, 892fa4a
+- Tests: cd apps/electron && bun run typecheck, cd apps/electron && bun run lint
 - PRs:

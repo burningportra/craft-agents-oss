@@ -8,7 +8,7 @@
  * - User can override view with segmented control
  * - Persists tab and view state across sessions
  * - Epic creation wizard (Quick/Standard/Complex templates)
- * - Onboarding tutorial for first-time users
+ * - Onboarding wizard for new projects (when flowStatus === 'needs-setup')
  * - OS notifications for task events
  */
 
@@ -18,23 +18,19 @@ import { useNavigationState, isTasksNavigation } from '@/contexts/NavigationCont
 import { useActiveWorkspace } from '@/context/AppShellContext'
 import { TasksMainContent } from '@/components/tasks/TasksMainContent'
 import { EpicCreationWizard } from '@/components/tasks/EpicCreationWizard'
-import { OnboardingTutorial, useOnboardingComplete, markOnboardingComplete } from '@/components/tasks/OnboardingTutorial'
+import { OnboardingWizard } from '@/components/tasks/OnboardingWizard'
 import {
   useFlowNotifications,
   useTaskCompletionNotifications,
   useEpicReviewReadyNotifications,
 } from '@/hooks/useFlowNotifications'
-import { epicsAtom, epicsLoadingStateAtom, activeTabAtom, openEpicTabAtom, epicWizardOpenAtom, activeFlowProjectAtom } from '@/atoms/tasks-state'
+import { epicsAtom, activeTabAtom, openEpicTabAtom, epicWizardOpenAtom, activeFlowProjectAtom } from '@/atoms/tasks-state'
 import { navigate, routes } from '@/lib/navigate'
-
-/** Delay (ms) before showing tutorial after initialization - allows UI to settle */
-const TUTORIAL_TRIGGER_DELAY_MS = 500
 
 export function TasksPage() {
   const navState = useNavigationState()
   const workspace = useActiveWorkspace()
   const epics = useAtomValue(epicsAtom)
-  const epicsLoadingState = useAtomValue(epicsLoadingStateAtom)
   const activeEpicId = useAtomValue(activeTabAtom)
   const openEpicTab = useSetAtom(openEpicTabAtom)
 
@@ -49,12 +45,9 @@ export function TasksPage() {
   // Wizard dialog state - using atom so it can be triggered from AppShell header too
   const [wizardOpen, setWizardOpen] = useAtom(epicWizardOpenAtom)
 
-  // Onboarding tutorial state
-  const isOnboardingComplete = useOnboardingComplete()
-  const [showTutorial, setShowTutorial] = React.useState(false)
-  const previousLoadingStateRef = React.useRef<string | null>(null)
-  // Track if we just did a fresh initialization (to trigger tutorial even with example epics)
-  const justInitializedRef = React.useRef(false)
+  // Onboarding wizard state — show when project needs setup
+  const showOnboardingWizard = activeFlowProject.flowStatus === 'needs-setup' && !!projectPath
+  const [onboardingDismissed, setOnboardingDismissed] = React.useState(false)
 
   // Flow notifications setup
   const { requestNotification } = useFlowNotifications({
@@ -103,30 +96,6 @@ export function TasksPage() {
     }, [workspaceId, requestNotification])
   )
 
-  // Trigger tutorial after first successful .flow/ initialization
-  // Detected by: loading state transitions from 'error' (no-flow-directory) to 'success'
-  // Note: flowctl init may create example epics, so we don't check epics.length === 0
-  React.useEffect(() => {
-    const prevState = previousLoadingStateRef.current
-
-    // Detect fresh initialization: transition from error to success
-    // This happens when user clicks "Initialize Flow-Next" in TasksEmptyState
-    if (
-      !isOnboardingComplete &&
-      epicsLoadingState === 'success' &&
-      (prevState === 'error' || prevState === 'idle')
-    ) {
-      justInitializedRef.current = true
-      // Delay to let the UI settle after loading completes
-      const timer = setTimeout(() => {
-        setShowTutorial(true)
-      }, TUTORIAL_TRIGGER_DELAY_MS)
-      return () => clearTimeout(timer)
-    }
-
-    previousLoadingStateRef.current = epicsLoadingState
-  }, [epicsLoadingState, isOnboardingComplete])
-
   // Handle task click - could open detail panel (task 7)
   const handleTaskClick = React.useCallback((epicId: string, taskId: string) => {
     console.log('[TasksPage] Task clicked:', { epicId, taskId })
@@ -151,15 +120,10 @@ export function TasksPage() {
     // Split-view chat will be implemented in task 10
   }, [])
 
-  // Handle tutorial completion
-  const handleTutorialComplete = React.useCallback(() => {
-    setShowTutorial(false)
+  // Handle onboarding wizard completion
+  const handleOnboardingComplete = React.useCallback(() => {
+    setOnboardingDismissed(true)
   }, [])
-
-  // Handle create epic from tutorial - opens wizard
-  const handleTutorialCreateEpic = React.useCallback(() => {
-    setWizardOpen(true)
-  }, [setWizardOpen])
 
   if (!workspaceRoot) {
     return (
@@ -188,11 +152,14 @@ export function TasksPage() {
         onOpenChat={handleOpenChat}
       />
 
-      {/* Onboarding Tutorial */}
-      <OnboardingTutorial
-        isActive={showTutorial}
-        onComplete={handleTutorialComplete}
-        onCreateEpic={handleTutorialCreateEpic}
+      {/* Onboarding Wizard — shown when project needs setup */}
+      <OnboardingWizard
+        open={showOnboardingWizard && !onboardingDismissed}
+        onOpenChange={(open) => {
+          if (!open) setOnboardingDismissed(true)
+        }}
+        projectPath={workspaceRoot}
+        onComplete={handleOnboardingComplete}
       />
     </>
   )
