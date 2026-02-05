@@ -2722,10 +2722,15 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
   })
 
   ipcMain.handle(IPC_CHANNELS.FLOW_PROJECT_UNREGISTER, (_event, projectPath: string) => {
+    const validation = validateProjectPath(projectPath)
+    if (!validation.valid) {
+      return { success: false, error: validation.error }
+    }
+    const resolved = resolve(projectPath)
     // Stop the FlowWatcher for this project
-    stopFlowWatcher(projectPath)
+    stopFlowWatcher(resolved)
     // Remove FlowBridge from cache
-    flowBridgeCache.delete(projectPath)
+    flowBridgeCache.delete(resolved)
     return { success: true }
   })
 
