@@ -49,6 +49,7 @@
     "@radix-ui/react-switch": "^1.2.6",
     "@tanstack/react-table": "^8.21.3",
     "@xyflow/react": "^12.10.0",
+    "canvas-confetti": "^1.9.4",
     "chrono-node": "^2.9.0",
     "cmdk": "^1.1.1",
     "dagre-d3-es": "^7.0.14",
@@ -70,6 +71,7 @@
     "vaul": "^1.1.2"
   },
   "devDependencies": {
+    "@types/canvas-confetti": "^1.9.0",
     "vite-plugin-commonjs": "^0.10.4"
   }
 }

@@ -2,11 +2,8 @@
  * OnboardingWizard
  *
  * 5-step modal onboarding wizard for new flow-next projects.
- * Steps 1-2 (Welcome + Interactive Demo) are implemented here.
- * Steps 3-5 are placeholder slots for Task 5.
- *
- * Steps 1-2 are required (not skippable).
- * Steps 3-5 are individually skippable.
+ * Steps 1-2 (Welcome + Interactive Demo) are required (not skippable).
+ * Steps 3-5 (Configure, Initialize, Create Epic) are individually skippable.
  *
  * Follows EpicCreationWizard.tsx pattern:
  * - Radix Dialog modal
@@ -16,6 +13,7 @@
 
 import * as React from 'react'
 import { motion, AnimatePresence } from 'motion/react'
+import confetti from 'canvas-confetti'
 import {
   Rocket,
   ArrowRight,
@@ -30,6 +28,14 @@ import {
   MessageSquare,
   CheckCircle2,
   Circle,
+  LayoutList,
+  Columns3,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
+  X,
+  Sparkles,
+  Check,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -37,7 +43,9 @@ import {
   DialogContent,
   DialogDescription,
 } from '@/components/ui/dialog'
+import { EpicCreationWizard } from './EpicCreationWizard'
 import type { FlowProjectContext } from '../../../shared/types'
+import type { EpicSummary } from '../../../shared/flow-schemas'
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -52,6 +60,16 @@ export interface OnboardingWizardProps {
   projectPath: string
   /** Callback when onboarding completes (all steps or skipped forward) */
   onComplete: () => void
+  /** Available epics for the EpicCreationWizard dependency selection */
+  epics?: EpicSummary[]
+  /** Callback when an epic is created in step 5 */
+  onEpicCreated?: (epicId: string) => void
+  /** Callback to open chat for complex epics */
+  onOpenChat?: (epicId: string) => void
+  /** Callback to set view mode preference from step 3 */
+  onSetViewMode?: (mode: 'list' | 'kanban') => void
+  /** Callback to refresh project status after init */
+  onRefreshProject?: () => void
 }
 
 // ─── Step Metadata ──────────────────────────────────────────────────────────────
@@ -86,6 +104,11 @@ export function OnboardingWizard({
   onOpenChange,
   projectPath,
   onComplete,
+  epics = [],
+  onEpicCreated,
+  onOpenChat,
+  onSetViewMode,
+  onRefreshProject,
 }: OnboardingWizardProps) {
   const [currentStep, setCurrentStep] = React.useState<OnboardingStep>(1)
   const [completedSteps, setCompletedSteps] = React.useState<Set<OnboardingStep>>(new Set())
@@ -95,6 +118,17 @@ export function OnboardingWizard({
 
   // Direction for slide animation (1 = forward, -1 = backward)
   const [direction, setDirection] = React.useState(1)
+
+  // Step 3 state: selected view mode (default: kanban as recommended)
+  const [selectedViewMode, setSelectedViewMode] = React.useState<'list' | 'kanban'>('kanban')
+
+  // Step 4 state: init progress
+  const [initStatus, setInitStatus] = React.useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [initError, setInitError] = React.useState<string | null>(null)
+
+  // Step 5 state: epic creation
+  const [epicWizardOpen, setEpicWizardOpen] = React.useState(false)
+  const [createdEpic, setCreatedEpic] = React.useState<{ id: string; title: string; taskCount: number } | null>(null)
 
   // Fetch project context on mount / projectPath change
   React.useEffect(() => {
@@ -138,6 +172,11 @@ export function OnboardingWizard({
       setProjectContext(null)
       setContextLoading(true)
       setDirection(1)
+      setSelectedViewMode('kanban')
+      setInitStatus('idle')
+      setInitError(null)
+      setEpicWizardOpen(false)
+      setCreatedEpic(null)
       setShouldReset(false)
     }
   }, [shouldReset])
@@ -148,17 +187,23 @@ export function OnboardingWizard({
   const handleNext = React.useCallback(() => {
     setCompletedSteps((prev) => new Set([...prev, currentStep]))
     setDirection(1)
+
+    // Apply view mode preference from step 3
+    if (currentStep === 3 && onSetViewMode) {
+      onSetViewMode(selectedViewMode)
+    }
+
     if (currentStep < 5) {
       setCurrentStep((currentStep + 1) as OnboardingStep)
     } else {
-      // Reset state before closing to prevent stale state on reopen
+      // Final step — close wizard
       setCurrentStep(1)
       setCompletedSteps(new Set())
       setDirection(1)
       onComplete()
       onOpenChange(false)
     }
-  }, [currentStep, onComplete, onOpenChange])
+  }, [currentStep, onComplete, onOpenChange, selectedViewMode, onSetViewMode])
 
   const handlePrev = React.useCallback(() => {
     setDirection(-1)
@@ -171,14 +216,114 @@ export function OnboardingWizard({
     // Steps 1-2 are not skippable, but steps 3-5 can be skipped
     const meta = STEPS[currentStep - 1]
     if (!meta.skippable) return
+
+    if (currentStep === 5) {
+      // Skipping step 5 closes wizard without creating an epic
+      setCurrentStep(1)
+      setCompletedSteps(new Set())
+      setDirection(1)
+      onComplete()
+      onOpenChange(false)
+      return
+    }
+
     handleNext()
-  }, [currentStep, handleNext])
+  }, [currentStep, handleNext, onComplete, onOpenChange])
+
+  // Step 4: Initialize flow-next
+  const handleInit = React.useCallback(async () => {
+    setInitStatus('loading')
+    setInitError(null)
+
+    try {
+      const result = await window.electronAPI.flowInit(projectPath)
+
+      if (result.ok) {
+        setInitStatus('success')
+        // Refresh project status to update activeFlowProjectAtom
+        onRefreshProject?.()
+        // Auto-advance to step 5 after a brief delay for visual feedback
+        setTimeout(() => {
+          setCompletedSteps((prev) => new Set([...prev, 4 as OnboardingStep]))
+          setDirection(1)
+          setCurrentStep(5)
+        }, 800)
+      } else {
+        const errorMsg = 'error' in result && result.error
+          ? typeof result.error === 'string'
+            ? result.error
+            : 'type' in result.error
+              ? getFlowErrorMessage(result.error.type as string, (result.error as Record<string, unknown>).stderr as string | undefined)
+              : 'Failed to initialize flow-next'
+          : 'Failed to initialize flow-next'
+        setInitStatus('error')
+        setInitError(errorMsg)
+      }
+    } catch (err) {
+      setInitStatus('error')
+      setInitError(err instanceof Error ? err.message : 'An unexpected error occurred')
+    }
+  }, [projectPath, onRefreshProject])
+
+  // Step 5: Handle epic created in embedded wizard
+  const handleEpicCreatedInStep5 = React.useCallback((epicId: string) => {
+    setEpicWizardOpen(false)
+
+    // Fetch epic details for summary card
+    window.electronAPI.flowEpicsList(projectPath)
+      .then((result) => {
+        if (result.ok) {
+          const epic = result.data.epics.find((e: EpicSummary) => e.id === epicId)
+          setCreatedEpic({
+            id: epicId,
+            title: epic?.title ?? epicId,
+            taskCount: epic?.tasks ?? 0,
+          })
+        } else {
+          setCreatedEpic({ id: epicId, title: epicId, taskCount: 0 })
+        }
+      })
+      .catch(() => {
+        setCreatedEpic({ id: epicId, title: epicId, taskCount: 0 })
+      })
+
+    // Fire confetti — respects prefers-reduced-motion
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (!prefersReducedMotion) {
+      confetti({
+        particleCount: 120,
+        spread: 80,
+        origin: { y: 0.7 },
+        colors: ['#4f46e5', '#06b6d4', '#10b981', '#f59e0b', '#ef4444'],
+        disableForReducedMotion: true,
+      })
+    }
+
+    // Notify parent of epic creation
+    onEpicCreated?.(epicId)
+  }, [projectPath, onEpicCreated])
+
+  // Step 5: "Get Started" button — close wizard and navigate to epic
+  const handleGetStarted = React.useCallback(() => {
+    setCurrentStep(1)
+    setCompletedSteps(new Set())
+    setDirection(1)
+    onComplete()
+    onOpenChange(false)
+  }, [onComplete, onOpenChange])
 
   // Can navigate backward only if not on step 1
   const canGoBack = currentStep > 1
 
   // Steps 1-2 cannot be skipped
   const canSkip = STEPS[currentStep - 1]?.skippable ?? false
+
+  // Determine footer button text and behavior based on step state
+  const isStep4Busy = currentStep === 4 && initStatus === 'loading'
+  const isStep5ShowingSummary = currentStep === 5 && createdEpic !== null
+
+  // Hide the default Continue button when step 4 is initializing, or step 5 has its own flow
+  const showDefaultContinue = currentStep !== 4 && !(currentStep === 5 && (epicWizardOpen || createdEpic))
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -255,10 +400,9 @@ export function OnboardingWizard({
                 role="region"
                 aria-label="Configure step"
               >
-                <PlaceholderStep
-                  step={3}
-                  title="Configure Preferences"
-                  description="Choose your default view mode and other preferences. (Coming in the next update)"
+                <ConfigureStep
+                  selectedViewMode={selectedViewMode}
+                  onViewModeChange={setSelectedViewMode}
                 />
               </motion.div>
             )}
@@ -273,10 +417,16 @@ export function OnboardingWizard({
                 role="region"
                 aria-label="Initialize step"
               >
-                <PlaceholderStep
-                  step={4}
-                  title="Initialize Flow-Next"
-                  description="Set up the .flow/ directory in your project. (Coming in the next update)"
+                <InitializeStep
+                  projectPath={projectPath}
+                  status={initStatus}
+                  error={initError}
+                  onInit={handleInit}
+                  onRetry={handleInit}
+                  onCancel={() => {
+                    setInitStatus('idle')
+                    setInitError(null)
+                  }}
                 />
               </motion.div>
             )}
@@ -291,10 +441,10 @@ export function OnboardingWizard({
                 role="region"
                 aria-label="Create epic step"
               >
-                <PlaceholderStep
-                  step={5}
-                  title="Create Your First Epic"
-                  description="Start planning your first feature with AI-assisted task generation. (Coming in the next update)"
+                <CreateEpicStep
+                  createdEpic={createdEpic}
+                  onOpenEpicWizard={() => setEpicWizardOpen(true)}
+                  onGetStarted={handleGetStarted}
                 />
               </motion.div>
             )}
@@ -339,7 +489,7 @@ export function OnboardingWizard({
 
           {/* Navigation Buttons */}
           <div className="flex items-center gap-2">
-            {canSkip && (
+            {canSkip && !isStep4Busy && !isStep5ShowingSummary && (
               <button
                 onClick={handleSkip}
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5"
@@ -348,7 +498,7 @@ export function OnboardingWizard({
                 Skip
               </button>
             )}
-            {canGoBack && (
+            {canGoBack && !isStep4Busy && !isStep5ShowingSummary && (
               <button
                 onClick={handlePrev}
                 className={cn(
@@ -362,20 +512,32 @@ export function OnboardingWizard({
                 Back
               </button>
             )}
-            <button
-              onClick={handleNext}
-              className={cn(
-                'flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-medium transition-all',
-                'bg-foreground text-background hover:bg-foreground/90',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-              )}
-              data-testid="onboarding-next-button"
-            >
-              {currentStep === 5 ? 'Finish' : 'Continue'}
-              {currentStep < 5 && <ArrowRight className="size-3.5" />}
-            </button>
+            {showDefaultContinue && (
+              <button
+                onClick={handleNext}
+                className={cn(
+                  'flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-medium transition-all',
+                  'bg-foreground text-background hover:bg-foreground/90',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                )}
+                data-testid="onboarding-next-button"
+              >
+                {currentStep === 5 ? 'Finish' : 'Continue'}
+                {currentStep < 5 && <ArrowRight className="size-3.5" />}
+              </button>
+            )}
           </div>
         </div>
+
+        {/* Embedded Epic Creation Wizard (Step 5) */}
+        <EpicCreationWizard
+          open={epicWizardOpen}
+          onOpenChange={setEpicWizardOpen}
+          workspaceRoot={projectPath}
+          epics={epics}
+          onEpicCreated={handleEpicCreatedInStep5}
+          onOpenChat={onOpenChat}
+        />
       </DialogContent>
     </Dialog>
   )
@@ -659,31 +821,401 @@ function InteractiveDemoStep({ projectName }: InteractiveDemoStepProps) {
   )
 }
 
-// ─── Placeholder Step (Steps 3-5) ───────────────────────────────────────────────
+// ─── Step 3: Configure ──────────────────────────────────────────────────────────
 
-interface PlaceholderStepProps {
-  step: number
-  title: string
-  description: string
+interface ConfigureStepProps {
+  selectedViewMode: 'list' | 'kanban'
+  onViewModeChange: (mode: 'list' | 'kanban') => void
 }
 
-function PlaceholderStep({ step, title, description }: PlaceholderStepProps) {
-  const icons = {
-    3: <Settings className="size-6 text-foreground/40" />,
-    4: <Terminal className="size-6 text-foreground/40" />,
-    5: <PartyPopper className="size-6 text-foreground/40" />,
-  }
+function ConfigureStep({ selectedViewMode, onViewModeChange }: ConfigureStepProps) {
+  const viewModeOptions = [
+    {
+      id: 'kanban' as const,
+      label: 'Kanban Board',
+      description: 'Visual columns for each task status. Great for tracking progress at a glance.',
+      icon: <Columns3 className="size-5" />,
+      recommended: true,
+    },
+    {
+      id: 'list' as const,
+      label: 'List View',
+      description: 'Compact table layout with sortable columns. Best for detailed task management.',
+      icon: <LayoutList className="size-5" />,
+      recommended: false,
+    },
+  ]
 
   return (
-    <div
-      className="flex flex-col items-center justify-center py-12"
-      data-testid={`onboarding-step-placeholder-${step}`}
-    >
-      <div className="p-3 rounded-xl bg-foreground/5 mb-4">
-        {icons[step as keyof typeof icons]}
+    <div className="flex flex-col items-center" data-testid="onboarding-step-configure">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-2">
+        <div className="p-2.5 rounded-xl bg-foreground/5">
+          <Settings className="size-6 text-foreground/80" />
+        </div>
       </div>
-      <h2 className="text-lg font-semibold text-center">{title}</h2>
-      <p className="text-sm text-muted-foreground text-center mt-2 max-w-sm">{description}</p>
+
+      <h2 className="text-lg font-semibold text-center">Configure Preferences</h2>
+      <p className="text-sm text-muted-foreground text-center mt-1.5 max-w-md">
+        Choose your default view mode for epic task boards. You can always change this later.
+      </p>
+
+      {/* View Mode Selection */}
+      <div className="w-full mt-6 space-y-3" role="radiogroup" aria-label="Default view mode">
+        {viewModeOptions.map((option) => {
+          const isSelected = option.id === selectedViewMode
+          return (
+            <button
+              key={option.id}
+              onClick={() => onViewModeChange(option.id)}
+              role="radio"
+              aria-checked={isSelected}
+              data-testid={`view-mode-option-${option.id}`}
+              className={cn(
+                'flex w-full items-start gap-4 rounded-xl p-4 text-left transition-all',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                'hover:bg-foreground/[0.02] shadow-minimal',
+                isSelected ? 'bg-background ring-1 ring-foreground/10' : 'bg-foreground/[0.01]'
+              )}
+            >
+              {/* Icon */}
+              <div className={cn(
+                'flex size-10 shrink-0 items-center justify-center rounded-lg',
+                isSelected ? 'bg-foreground/10 text-foreground' : 'bg-foreground/5 text-foreground/50'
+              )}>
+                {option.icon}
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-sm">{option.label}</span>
+                  {option.recommended && (
+                    <span className="rounded-[4px] bg-background shadow-minimal px-2 py-0.5 text-[11px] font-medium text-foreground/70">
+                      Recommended
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">{option.description}</p>
+              </div>
+
+              {/* Check */}
+              <div
+                className={cn(
+                  'flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
+                  isSelected
+                    ? 'border-foreground bg-foreground text-background'
+                    : 'border-muted-foreground/20'
+                )}
+                aria-hidden="true"
+              >
+                {isSelected && <Check className="size-3" strokeWidth={3} />}
+              </div>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
+}
+
+// ─── Step 4: Initialize ─────────────────────────────────────────────────────────
+
+interface InitializeStepProps {
+  projectPath: string
+  status: 'idle' | 'loading' | 'success' | 'error'
+  error: string | null
+  onInit: () => void
+  onRetry: () => void
+  onCancel: () => void
+}
+
+function InitializeStep({ projectPath, status, error, onInit, onRetry, onCancel }: InitializeStepProps) {
+  // Auto-start init on mount if idle
+  React.useEffect(() => {
+    if (status === 'idle') {
+      onInit()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const dirName = projectPath.split('/').pop() ?? projectPath
+
+  return (
+    <div className="flex flex-col items-center" data-testid="onboarding-step-initialize">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-2">
+        <div className="p-2.5 rounded-xl bg-foreground/5">
+          <Terminal className="size-6 text-foreground/80" />
+        </div>
+      </div>
+
+      <h2 className="text-lg font-semibold text-center">Initialize Flow-Next</h2>
+      <p className="text-sm text-muted-foreground text-center mt-1.5 max-w-md">
+        Setting up the <code className="text-xs bg-foreground/5 px-1 py-0.5 rounded">.flow/</code> directory in{' '}
+        <span className="font-medium text-foreground">{dirName}</span>
+      </p>
+
+      {/* Status Display */}
+      <div className="w-full mt-8">
+        {status === 'loading' && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center gap-4 py-8"
+          >
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+            >
+              <Loader2 className="size-8 text-foreground/60" />
+            </motion.div>
+            <div className="text-center">
+              <p className="text-sm font-medium">Initializing...</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Running <code className="bg-foreground/5 px-1 py-0.5 rounded">flowctl init</code>
+              </p>
+            </div>
+          </motion.div>
+        )}
+
+        {status === 'success' && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center gap-4 py-8"
+          >
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+              className="flex size-12 items-center justify-center rounded-full bg-emerald-500/10"
+            >
+              <CheckCircle2 className="size-6 text-emerald-500" />
+            </motion.div>
+            <div className="text-center">
+              <p className="text-sm font-medium">Flow-next initialized</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                The <code className="bg-foreground/5 px-1 py-0.5 rounded">.flow/</code> directory has been created.
+              </p>
+            </div>
+          </motion.div>
+        )}
+
+        {status === 'error' && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center gap-4"
+          >
+            <div className="flex size-12 items-center justify-center rounded-full bg-red-500/10">
+              <AlertCircle className="size-6 text-red-500" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-red-600">Initialization failed</p>
+            </div>
+
+            {/* Error details */}
+            {error && (
+              <div className="w-full rounded-lg border border-red-200/50 bg-red-500/5 p-4">
+                <p className="text-xs text-red-600 font-mono whitespace-pre-wrap break-all">{error}</p>
+              </div>
+            )}
+
+            {/* Troubleshooting */}
+            <div className="w-full rounded-lg border border-border/50 bg-foreground/[0.01] p-4">
+              <p className="text-xs font-medium mb-2">Troubleshooting</p>
+              <ul className="text-xs text-muted-foreground space-y-1.5">
+                <li className="flex items-start gap-2">
+                  <span className="text-foreground/40 mt-0.5">1.</span>
+                  Ensure you have write permissions to the project directory.
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-foreground/40 mt-0.5">2.</span>
+                  Check that no other process is locking the directory.
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-foreground/40 mt-0.5">3.</span>
+                  Verify that <code className="bg-foreground/5 px-1 py-0.5 rounded">flowctl</code> is available in <code className="bg-foreground/5 px-1 py-0.5 rounded">.flow/bin/</code>.
+                </li>
+              </ul>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onCancel}
+                className={cn(
+                  'flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all',
+                  'text-foreground/70 hover:text-foreground hover:bg-foreground/5',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                )}
+                data-testid="init-cancel-button"
+              >
+                <X className="size-3.5" />
+                Cancel
+              </button>
+              <button
+                onClick={onRetry}
+                className={cn(
+                  'flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all',
+                  'bg-foreground text-background hover:bg-foreground/90',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                )}
+                data-testid="init-retry-button"
+              >
+                <RefreshCw className="size-3.5" />
+                Retry
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {status === 'idle' && (
+          <div className="flex flex-col items-center gap-4 py-8">
+            <p className="text-sm text-muted-foreground">Ready to initialize.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Step 5: Create Epic + Celebrate ────────────────────────────────────────────
+
+interface CreateEpicStepProps {
+  createdEpic: { id: string; title: string; taskCount: number } | null
+  onOpenEpicWizard: () => void
+  onGetStarted: () => void
+}
+
+function CreateEpicStep({ createdEpic, onOpenEpicWizard, onGetStarted }: CreateEpicStepProps) {
+  if (createdEpic) {
+    // Success state: show summary card + Get Started button
+    return (
+      <div className="flex flex-col items-center" data-testid="onboarding-step-celebrate">
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 15, delay: 0.1 }}
+          className="p-3 rounded-xl bg-emerald-500/10 mb-4"
+        >
+          <Sparkles className="size-6 text-emerald-500" />
+        </motion.div>
+
+        <motion.h2
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="text-lg font-semibold text-center"
+        >
+          You&apos;re all set!
+        </motion.h2>
+
+        <motion.p
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="text-sm text-muted-foreground text-center mt-1.5 max-w-md"
+        >
+          Your first epic has been created. Start working through tasks to ship your feature.
+        </motion.p>
+
+        {/* Summary Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="w-full mt-6 rounded-xl border border-border/50 bg-foreground/[0.02] p-5 shadow-minimal"
+        >
+          <div className="flex items-start gap-4">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10">
+              <ListChecks className="size-5 text-blue-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-sm">{createdEpic.title}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {createdEpic.taskCount > 0
+                  ? `${createdEpic.taskCount} task${createdEpic.taskCount === 1 ? '' : 's'} created`
+                  : 'Run /plan in the chat to generate tasks'}
+              </p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Get Started Button */}
+        <motion.button
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          onClick={onGetStarted}
+          className={cn(
+            'mt-6 w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-medium text-sm transition-all',
+            'bg-foreground text-background hover:bg-foreground/90',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+          )}
+          data-testid="onboarding-get-started-button"
+        >
+          Get Started
+          <ArrowRight className="size-4" />
+        </motion.button>
+      </div>
+    )
+  }
+
+  // Default state: prompt to create an epic
+  return (
+    <div className="flex flex-col items-center" data-testid="onboarding-step-create-epic">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-2">
+        <div className="p-2.5 rounded-xl bg-foreground/5">
+          <PartyPopper className="size-6 text-foreground/80" />
+        </div>
+      </div>
+
+      <h2 className="text-lg font-semibold text-center">Create Your First Epic</h2>
+      <p className="text-sm text-muted-foreground text-center mt-1.5 max-w-md">
+        An epic is a feature or project broken into tasks. Create one now to see flow-next in action.
+      </p>
+
+      {/* Create Epic Button */}
+      <button
+        onClick={onOpenEpicWizard}
+        className={cn(
+          'mt-8 w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-medium text-sm transition-all',
+          'bg-foreground text-background hover:bg-foreground/90',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+        )}
+        data-testid="onboarding-create-epic-button"
+      >
+        <Sparkles className="size-4" />
+        Create Epic
+      </button>
+
+      <p className="text-xs text-muted-foreground text-center mt-3">
+        Choose from Quick, Standard, or Complex templates.
+      </p>
+    </div>
+  )
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────────
+
+function getFlowErrorMessage(type: string, stderr?: string): string {
+  switch (type) {
+    case 'flowctl_not_found':
+      return 'Flow CLI not found. Make sure flowctl is installed in .flow/bin/'
+    case 'invalid_json':
+      return 'Unexpected response from Flow CLI.'
+    case 'invalid_output':
+      return 'Invalid response format from Flow CLI.'
+    case 'command_failed':
+      return stderr || 'Flow command failed.'
+    case 'timeout':
+      return 'Command timed out. Please try again.'
+    case 'no_project_configured':
+      return 'No project configured. Register a project first.'
+    default:
+      return `Initialization failed: ${type}`
+  }
 }

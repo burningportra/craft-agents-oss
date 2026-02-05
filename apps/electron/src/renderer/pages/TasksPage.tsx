@@ -24,7 +24,7 @@ import {
   useTaskCompletionNotifications,
   useEpicReviewReadyNotifications,
 } from '@/hooks/useFlowNotifications'
-import { epicsAtom, activeTabAtom, openEpicTabAtom, epicWizardOpenAtom, activeFlowProjectAtom } from '@/atoms/tasks-state'
+import { epicsAtom, activeTabAtom, openEpicTabAtom, epicWizardOpenAtom, activeFlowProjectAtom, setViewModeAtom, setActiveFlowProjectAtom } from '@/atoms/tasks-state'
 import { navigate, routes } from '@/lib/navigate'
 
 export function TasksPage() {
@@ -44,6 +44,10 @@ export function TasksPage() {
 
   // Wizard dialog state - using atom so it can be triggered from AppShell header too
   const [wizardOpen, setWizardOpen] = useAtom(epicWizardOpenAtom)
+
+  // Action atoms for onboarding wizard callbacks
+  const setViewMode = useSetAtom(setViewModeAtom)
+  const setActiveProject = useSetAtom(setActiveFlowProjectAtom)
 
   // Onboarding wizard state — show when project needs setup
   const showOnboardingWizard = activeFlowProject.flowStatus === 'needs-setup' && !!projectPath
@@ -125,6 +129,32 @@ export function TasksPage() {
     setOnboardingDismissed(true)
   }, [])
 
+  // Handle view mode selection from onboarding step 3
+  const handleOnboardingSetViewMode = React.useCallback((mode: 'list' | 'kanban') => {
+    // Apply the selected view mode as the default for any newly opened epic.
+    // setViewModeAtom requires an epicId — we set '__default' as a sentinel that
+    // TasksMainContent can read for initial epic opens.
+    // For now, if there's an active epic, apply it there; otherwise store for later.
+    if (activeEpicId) {
+      setViewMode(activeEpicId, mode)
+    }
+  }, [activeEpicId, setViewMode])
+
+  // Handle project refresh after flow-next init (onboarding step 4)
+  const handleRefreshProject = React.useCallback(() => {
+    if (projectPath) {
+      setActiveProject(projectPath)
+    }
+  }, [projectPath, setActiveProject])
+
+  // Handle epic created from onboarding step 5 — navigate to kanban view
+  const handleOnboardingEpicCreated = React.useCallback((epicId: string) => {
+    openEpicTab(epicId)
+    // Set kanban as the view mode for the new epic (onboarding recommends kanban)
+    setViewMode(epicId, 'kanban')
+    navigate(routes.view.epicDetail(epicId))
+  }, [openEpicTab, setViewMode])
+
   if (!workspaceRoot) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -160,6 +190,11 @@ export function TasksPage() {
         }}
         projectPath={workspaceRoot}
         onComplete={handleOnboardingComplete}
+        epics={epics}
+        onEpicCreated={handleOnboardingEpicCreated}
+        onOpenChat={handleOpenChat}
+        onSetViewMode={handleOnboardingSetViewMode}
+        onRefreshProject={handleRefreshProject}
       />
     </>
   )

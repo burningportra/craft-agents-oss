@@ -47,9 +47,8 @@ Build the onboarding wizard modal shell, implement steps 1-2 (Welcome + Interact
 - [ ] No competing onboarding experiences exist
 - [ ] App typechecks and lints clean
 ## Done summary
-TBD
-
+Created OnboardingWizard component (Radix Dialog + Motion AnimatePresence) with Step 1 (Welcome with project context via IPC) and Step 2 (Interactive Demo with clickable phase selector). Removed old OnboardingTutorial.tsx and its localStorage key, wired wizard to trigger on activeFlowProjectAtom.flowStatus === 'needs-setup', and added placeholder slots for steps 3-5.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 7322c78, 6bca3b7
+- Tests: cd apps/electron && bun run typecheck, cd apps/electron && bun run lint
 - PRs:
