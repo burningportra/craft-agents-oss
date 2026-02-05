@@ -34,36 +34,9 @@ Implement the remaining onboarding wizard steps: Configure (3), Initialize (4), 
 
 - `EpicCreationWizard.tsx` has props `{ open, onOpenChange, workspaceRoot, epics, onEpicCreated, onOpenChat }` — reuse for step 5
 - `canvas-confetti` is recommended over `react-confetti` — lighter, supports web workers, no React dependency
+<!-- Updated by plan-sync: fn-3...1 used activeFlowProjectAtom (not activeProjectAtom), and FlowWatcher lifecycle is managed via syncFlowWatcherAtom action atom -->
 - FlowBridge already has `init()` method at `flow-bridge.ts` — may just need IPC wiring
-## Approach
-
-- **Step 3 (Configure)**:
-  - Toggle: gitignore `ui-state.json` (default: yes)
-  - Select: default view mode (list/kanban, default: kanban)
-  - Store preferences in a local config atom; apply when `.flow/` is initialized
-  - Skippable — uses defaults
-- **Step 4 (Initialize)**:
-  - Call `flowctl init` via FlowBridge IPC
-  - Show animated progress spinner during init
-  - On success: update `activeProjectAtom.flowStatus` to `'initialized'`, auto-advance to step 5
-  - On error: show detailed error dialog with full error text, troubleshooting steps, retry button, cancel button
-  - Skippable — but skipping means `.flow/` won't exist yet (user must init later)
-- **Step 5 (Create Epic + Celebrate)**:
-  - Open the existing `EpicCreationWizard` (Quick/Standard/Complex modes) inline or as nested dialog
-  - On epic creation success:
-    - `canvas-confetti` burst animation (new dependency, ~4KB gzip, no framework deps)
-    - Summary card showing what was created (epic name, task count)
-    - "Get Started" button closes wizard and navigates to the new epic's kanban view
-  - Skippable — closes wizard without creating an epic
-- Wire skip behavior: "Skip" button on steps 3-5 advances to next step (or closes wizard if step 5)
-- Add `FLOW_INIT` IPC channel if not already present (check existing channels first)
-
-## Key context
-
-- `EpicCreationWizard.tsx` has props `{ open, onOpenChange, workspaceRoot, epics, onEpicCreated, onOpenChat }` — reuse for step 5
-- `canvas-confetti` is recommended over `react-confetti` — lighter, supports web workers, no React dependency
-- FlowBridge already has methods for flowctl operations — may need a `runInit()` method or use existing exec pattern
-- The IPC channel `FLOW_EPIC_CREATE` from epic fn-1 may already exist — check and reuse
+- On init success, use `setActiveFlowProjectAtom` to refresh status (it calls `flowProjectCheckStatus` and updates `activeFlowProjectAtom.flowStatus`)
 ## Acceptance
 - [ ] Step 3 shows configure options (default view mode)
 - [ ] Step 3 defaults are sensible (kanban view)

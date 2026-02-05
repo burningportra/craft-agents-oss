@@ -3,13 +3,17 @@
  *
  * Jotai atoms for flow-next epic and task management.
  * Provides reactive state for the Tasks navigator panel.
+ *
+ * UI state (openTabs, activeTab, viewModePerEpic) is persisted to
+ * .flow/ui-state.json per project instead of global localStorage.
+ * Writes are debounced at 500ms following the persistence-queue pattern.
  */
 
 import { atom } from 'jotai'
 import { atomWithStorage } from 'jotai/utils'
 import { atomFamily } from 'jotai-family'
 import type { EpicSummary, TaskSummary, TaskStatus, FlowBridgeResult, EpicListResponse, TaskListResponse, CommandSuccess } from '../../shared/flow-schemas'
-import type { ActiveFlowProject, RegisteredFlowProject, FlowProjectStatus } from '../../shared/types'
+import type { ActiveFlowProject, RegisteredFlowProject, FlowProjectStatus, FlowUiState } from '../../shared/types'
 
 // ─── Flow Project Atoms ──────────────────────────────────────────────────────
 
@@ -66,6 +70,9 @@ export const setActiveFlowProjectAtom = atom(
         flowStatus,
         gitInfo: gitInfo ?? undefined,
       })
+
+      // Hydrate UI state from .flow/ui-state.json for this project
+      set(hydrateUiStateAtom, projectPath)
     } catch (err) {
       console.error('[setActiveFlowProjectAtom] Error:', err)
       set(activeFlowProjectAtom, {
@@ -136,8 +143,6 @@ export const unregisterFlowProjectAtom = atom(
     }
   }
 )
-
-// ─── FlowWatcher Lifecycle ────────────────────────────────────────────────────
 
 // ─── FlowWatcher Lifecycle ────────────────────────────────────────────────────
 
@@ -245,48 +250,319 @@ export const epicsAtom = atom<EpicSummary[]>([])
  */
 export const epicsErrorAtom = atom<string | null>(null)
 
-// ─── Selected Epic ───────────────────────────────────────────────────────────
+// ─── Per-Project UI State (file-backed) ──────────────────────────────────────
+// These atoms were previously backed by localStorage (atomWithStorage).
+// Now they are plain atoms hydrated from .flow/ui-state.json on project switch
+// and persisted back via debounced writes.
 
 /**
- * Currently selected epic ID - persisted across sessions
- * Uses atomWithStorage to save to localStorage
+ * Currently selected epic ID — synced with activeTab for backward compatibility.
+ * Persisted to .flow/ui-state.json as `activeTab`.
  */
-export const selectedEpicIdAtom = atomWithStorage<string | null>(
-  'tasks-selected-epic-id',
-  null
-)
-
-// ─── Tab Navigation Atoms ─────────────────────────────────────────────────────
-// Note: Defined early so resetTasksStateAtom can reference them
+export const selectedEpicIdAtom = atom<string | null>(null)
 
 /**
- * Open tabs: ordered array of epic IDs
- * Persisted via atomWithStorage - restores on reload
+ * Open tabs: ordered array of epic IDs.
+ * Persisted to .flow/ui-state.json as `openTabs`.
  */
-export const openTabsAtom = atomWithStorage<string[]>(
-  'tasks-open-tabs',
-  []
-)
+export const openTabsAtom = atom<string[]>([])
 
 /**
- * Active (currently visible) tab: epic ID
- * Persisted via atomWithStorage - restores on reload
+ * Active (currently visible) tab: epic ID.
+ * Persisted to .flow/ui-state.json as `activeTab`.
  */
-export const activeTabAtom = atomWithStorage<string | null>(
-  'tasks-active-tab',
-  null
-)
+export const activeTabAtom = atom<string | null>(null)
 
 /**
- * View mode override per epic
- * Uses atomFamily for per-epic storage with atomWithStorage for persistence
+ * View mode overrides per epic, stored as a flat map.
+ * Persisted to .flow/ui-state.json as `viewModePerEpic`.
+ * The atomFamily provides per-epic reactivity.
+ */
+const viewModeMapAtom = atom<Record<string, ViewMode | null>>({})
+
+/**
+ * View mode override per epic.
+ * Uses atomFamily for per-epic reactivity with file-backed storage.
+ * Reads from the internal viewModeMapAtom. Writes trigger debounced persistence.
  */
 export const viewModePerEpicAtomFamily = atomFamily(
-  (epicId: string) => atomWithStorage<ViewMode | null>(
-    `tasks-view-mode-${epicId}`,
-    null
+  (epicId: string) => atom(
+    (get) => {
+      const map = get(viewModeMapAtom)
+      return (map[epicId] as ViewMode | null) ?? null
+    },
+    (get, set, value: ViewMode | null) => {
+      const map = get(viewModeMapAtom)
+      set(viewModeMapAtom, { ...map, [epicId]: value })
+      // Trigger debounced persist
+      set(scheduleUiStatePersistAtom)
+    }
   ),
   (a, b) => a === b
+)
+
+// ─── Debounced UI State Persistence ──────────────────────────────────────────
+
+const UI_STATE_DEBOUNCE_MS = 500
+
+/**
+ * Internal atom tracking the debounce timer for UI state writes.
+ */
+const uiStatePersistTimerAtom = atom<ReturnType<typeof setTimeout> | null>(null)
+
+/**
+ * Tracks whether localStorage migration has been completed for the current project.
+ * Prevents re-running migration on every hydrate.
+ */
+const uiStateMigrationDoneAtom = atom<boolean>(false)
+
+/**
+ * Collects current UI state from atoms into a FlowUiState object.
+ */
+const collectUiStateAtom = atom((get): FlowUiState => {
+  const openTabs = get(openTabsAtom)
+  const activeTab = get(activeTabAtom)
+  const viewModeMap = get(viewModeMapAtom)
+
+  // Only include non-null view mode entries
+  const viewModePerEpic: Record<string, string> = {}
+  for (const [epicId, mode] of Object.entries(viewModeMap)) {
+    if (mode !== null) {
+      viewModePerEpic[epicId] = mode
+    }
+  }
+
+  return {
+    openTabs,
+    activeTab,
+    viewModePerEpic,
+  }
+})
+
+/**
+ * Action atom: Schedule a debounced write of UI state to .flow/ui-state.json.
+ * Coalesces rapid mutations into a single write. Follows the persistence-queue
+ * pattern from sessions/persistence-queue.ts.
+ */
+export const scheduleUiStatePersistAtom = atom(
+  null,
+  (get, set) => {
+    const project = get(activeFlowProjectAtom)
+    if (!project.path || project.flowStatus !== 'initialized') return
+
+    // Clear existing timer
+    const existingTimer = get(uiStatePersistTimerAtom)
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+    }
+
+    const projectPath = project.path
+    const timer = setTimeout(async () => {
+      try {
+        const state = get(collectUiStateAtom)
+        await window.electronAPI.flowUiStateWrite(projectPath, state)
+      } catch (err) {
+        console.error('[scheduleUiStatePersistAtom] Write failed:', err)
+      }
+    }, UI_STATE_DEBOUNCE_MS)
+
+    set(uiStatePersistTimerAtom, timer)
+  }
+)
+
+// ─── localStorage Migration ──────────────────────────────────────────────────
+
+/**
+ * localStorage keys used by the old global UI state atoms.
+ * These are migrated to .flow/ui-state.json on first load, then cleared.
+ */
+const LEGACY_STORAGE_KEYS = {
+  selectedEpicId: 'tasks-selected-epic-id',
+  openTabs: 'tasks-open-tabs',
+  activeTab: 'tasks-active-tab',
+  viewModePrefix: 'tasks-view-mode-',
+} as const
+
+/**
+ * Read and parse legacy localStorage UI state.
+ * Returns null if no legacy data exists.
+ *
+ * Uses localStorage intentionally for one-time migration to .flow/ui-state.json.
+ */
+function readLegacyUiState(): FlowUiState | null {
+  try {
+    /* eslint-disable craft-agent/no-localstorage -- migration reads legacy localStorage keys */
+    const openTabsRaw = localStorage.getItem(LEGACY_STORAGE_KEYS.openTabs)
+    const activeTabRaw = localStorage.getItem(LEGACY_STORAGE_KEYS.activeTab)
+
+    // If neither key exists, no migration needed
+    if (!openTabsRaw && !activeTabRaw) return null
+
+    const openTabs: string[] = openTabsRaw ? JSON.parse(openTabsRaw) : []
+    const activeTab: string | null = activeTabRaw ? JSON.parse(activeTabRaw) : null
+
+    // Collect view mode overrides from localStorage (keyed by prefix)
+    const viewModePerEpic: Record<string, string> = {}
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith(LEGACY_STORAGE_KEYS.viewModePrefix)) {
+        const epicId = key.slice(LEGACY_STORAGE_KEYS.viewModePrefix.length)
+        try {
+          const mode = JSON.parse(localStorage.getItem(key) ?? 'null')
+          if (mode) {
+            viewModePerEpic[epicId] = mode
+          }
+        } catch {
+          // Skip invalid entries
+        }
+      }
+    }
+    /* eslint-enable craft-agent/no-localstorage */
+
+    return { openTabs, activeTab, viewModePerEpic }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Clear legacy localStorage keys after successful migration.
+ *
+ * Uses localStorage intentionally to clean up migrated keys.
+ */
+function clearLegacyUiState(): void {
+  try {
+    /* eslint-disable craft-agent/no-localstorage -- migration clears legacy localStorage keys */
+    localStorage.removeItem(LEGACY_STORAGE_KEYS.selectedEpicId)
+    localStorage.removeItem(LEGACY_STORAGE_KEYS.openTabs)
+    localStorage.removeItem(LEGACY_STORAGE_KEYS.activeTab)
+
+    // Remove all view mode keys
+    const keysToRemove: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith(LEGACY_STORAGE_KEYS.viewModePrefix)) {
+        keysToRemove.push(key)
+      }
+    }
+    for (const key of keysToRemove) {
+      localStorage.removeItem(key)
+    }
+    /* eslint-enable craft-agent/no-localstorage */
+  } catch {
+    // Best-effort cleanup
+  }
+}
+
+// ─── UI State Hydration ──────────────────────────────────────────────────────
+
+/**
+ * Apply a FlowUiState object to the in-memory atoms via individual set calls.
+ * Does not trigger persistence (avoids circular write-back).
+ *
+ * Returns the values to set — caller applies them with `set()`.
+ */
+function parseUiState(state: FlowUiState): {
+  openTabs: string[]
+  activeTab: string | null
+  selectedEpicId: string | null
+  viewModeMap: Record<string, ViewMode | null>
+} {
+  const viewModeMap: Record<string, ViewMode | null> = {}
+  if (state.viewModePerEpic) {
+    for (const [epicId, mode] of Object.entries(state.viewModePerEpic)) {
+      viewModeMap[epicId] = mode as ViewMode
+    }
+  }
+  return {
+    openTabs: state.openTabs ?? [],
+    activeTab: state.activeTab ?? null,
+    selectedEpicId: state.activeTab ?? null, // selectedEpicId mirrors activeTab
+    viewModeMap,
+  }
+}
+
+/**
+ * Action atom: Hydrate UI state from .flow/ui-state.json for a project.
+ * Handles migration from localStorage on first load.
+ * When no ui-state.json exists (first open): will auto-open the most active epic
+ * once epics are loaded (see loadEpicsAtom).
+ *
+ * Called internally by setActiveFlowProjectAtom — not for external use.
+ */
+export const hydrateUiStateAtom = atom(
+  null,
+  async (get, set, projectPath: string) => {
+    try {
+      // Read persisted UI state from .flow/ui-state.json
+      const persisted = await window.electronAPI.flowUiStateRead(projectPath)
+
+      if (persisted) {
+        // Apply persisted state
+        const parsed = parseUiState(persisted)
+        set(openTabsAtom, parsed.openTabs)
+        set(activeTabAtom, parsed.activeTab)
+        set(selectedEpicIdAtom, parsed.selectedEpicId)
+        set(viewModeMapAtom, parsed.viewModeMap)
+        set(uiStateMigrationDoneAtom, true)
+        return
+      }
+
+      // No persisted state — check if this is a migration scenario
+      const project = get(activeFlowProjectAtom)
+      if (project.flowStatus === 'needs-setup') {
+        // .flow/ doesn't exist yet — use in-memory defaults, skip migration
+        set(openTabsAtom, [])
+        set(activeTabAtom, null)
+        set(selectedEpicIdAtom, null)
+        set(viewModeMapAtom, {})
+        set(uiStateMigrationDoneAtom, true)
+        return
+      }
+
+      // .flow/ exists but no ui-state.json — attempt localStorage migration
+      if (!get(uiStateMigrationDoneAtom)) {
+        const legacyState = readLegacyUiState()
+        if (legacyState) {
+          // Apply legacy state to atoms
+          const parsed = parseUiState(legacyState)
+          set(openTabsAtom, parsed.openTabs)
+          set(activeTabAtom, parsed.activeTab)
+          set(selectedEpicIdAtom, parsed.selectedEpicId)
+          set(viewModeMapAtom, parsed.viewModeMap)
+
+          // Persist to .flow/ui-state.json
+          try {
+            await window.electronAPI.flowUiStateWrite(projectPath, legacyState)
+          } catch {
+            // Best-effort — state is in memory regardless
+          }
+
+          // Clear legacy localStorage keys after successful migration
+          clearLegacyUiState()
+          set(uiStateMigrationDoneAtom, true)
+          return
+        }
+      }
+
+      // No legacy state and no persisted state — use defaults.
+      // The "auto-open most active epic" logic runs in loadEpicsAtom
+      // after epics are loaded (since we need epic data to determine which to open).
+      set(openTabsAtom, [])
+      set(activeTabAtom, null)
+      set(selectedEpicIdAtom, null)
+      set(viewModeMapAtom, {})
+      set(uiStateMigrationDoneAtom, true)
+    } catch (err) {
+      console.error('[hydrateUiStateAtom] Error:', err)
+      // Fall through to defaults on error
+      set(openTabsAtom, [])
+      set(activeTabAtom, null)
+      set(selectedEpicIdAtom, null)
+      set(viewModeMapAtom, {})
+      set(uiStateMigrationDoneAtom, true)
+    }
+  }
 )
 
 // ─── Tasks per Epic ──────────────────────────────────────────────────────────
@@ -329,6 +605,36 @@ export const selectedEpicTasksAtom = atom((get) => {
   return get(tasksAtomFamily(selectedId))
 })
 
+// ─── Auto-Open Most Active Epic ──────────────────────────────────────────────
+
+/**
+ * Determine the most active epic to auto-open when no UI state exists.
+ * Priority: most in-progress tasks → most recently updated → first by epic ID.
+ *
+ * When `in_progress` isn't available from flowctl (older versions), uses
+ * `(tasks - done)` as a proxy for activity level.
+ */
+function findMostActiveEpic(epics: EpicSummary[]): EpicSummary | null {
+  if (epics.length === 0) return null
+
+  return epics.reduce((best, epic) => {
+    // Compare in-progress task count (fallback: tasks - done as proxy for active work)
+    const epicActive = epic.in_progress ?? (epic.tasks - epic.done)
+    const bestActive = best.in_progress ?? (best.tasks - best.done)
+    if (epicActive > bestActive) return epic
+    if (epicActive < bestActive) return best
+
+    // Tiebreaker: most recently updated (updated_at)
+    const epicUpdated = epic.updated_at ? new Date(epic.updated_at).getTime() : 0
+    const bestUpdated = best.updated_at ? new Date(best.updated_at).getTime() : 0
+    if (epicUpdated > bestUpdated) return epic
+    if (epicUpdated < bestUpdated) return best
+
+    // Tiebreaker: first by epic ID (alphabetical)
+    return epic.id < best.id ? epic : best
+  })
+}
+
 // ─── Action Atoms ────────────────────────────────────────────────────────────
 
 /**
@@ -352,12 +658,29 @@ export const loadEpicsAtom = atom(
         // Auto-select first epic if none selected
         const currentSelected = get(selectedEpicIdAtom)
         if (!currentSelected && result.data.epics.length > 0) {
-          set(selectedEpicIdAtom, result.data.epics[0].id)
+          // No UI state was hydrated — auto-open most active epic
+          const mostActive = findMostActiveEpic(result.data.epics)
+          if (mostActive) {
+            set(selectedEpicIdAtom, mostActive.id)
+            set(activeTabAtom, mostActive.id)
+            set(openTabsAtom, [mostActive.id])
+            // Persist the auto-opened state
+            set(scheduleUiStatePersistAtom)
+          }
         }
 
         // If selected epic no longer exists, select first available
         if (currentSelected && !epicIds.includes(currentSelected)) {
-          set(selectedEpicIdAtom, result.data.epics[0]?.id ?? null)
+          const fallback = result.data.epics[0]?.id ?? null
+          set(selectedEpicIdAtom, fallback)
+          set(activeTabAtom, fallback)
+          if (fallback) {
+            const currentTabs = get(openTabsAtom)
+            if (!currentTabs.includes(fallback)) {
+              set(openTabsAtom, [...currentTabs, fallback])
+            }
+          }
+          set(scheduleUiStatePersistAtom)
         }
 
         // Validate persisted tabs against loaded epics (filter out stale tabs)
@@ -365,6 +688,7 @@ export const loadEpicsAtom = atom(
         const validTabs = openTabs.filter(id => epicIds.includes(id))
         if (validTabs.length !== openTabs.length) {
           set(openTabsAtom, validTabs)
+          set(scheduleUiStatePersistAtom)
         }
 
         // Validate active tab
@@ -372,6 +696,7 @@ export const loadEpicsAtom = atom(
         if (activeTab && !epicIds.includes(activeTab)) {
           set(activeTabAtom, validTabs[0] ?? null)
           set(selectedEpicIdAtom, validTabs[0] ?? null)
+          set(scheduleUiStatePersistAtom)
         }
       } else {
         // Handle error
@@ -478,6 +803,9 @@ export const resetTasksStateAtom = atom(
     // Clear tab state to prevent stale tabs from previous workspace
     set(openTabsAtom, [])
     set(activeTabAtom, null)
+    set(viewModeMapAtom, {})
+    // Reset migration flag so next project hydration can migrate if needed
+    set(uiStateMigrationDoneAtom, false)
     // Reset active flow project to prevent cross-workspace bugs (project registration persists in localStorage)
     set(activeFlowProjectAtom, { path: null, flowStatus: 'needs-setup' })
   }
@@ -503,6 +831,8 @@ export const openEpicTabAtom = atom(
     set(activeTabAtom, epicId)
     // Also sync with selectedEpicIdAtom for backward compatibility
     set(selectedEpicIdAtom, epicId)
+    // Persist
+    set(scheduleUiStatePersistAtom)
   }
 )
 
@@ -536,6 +866,9 @@ export const closeEpicTabAtom = atom(
         set(selectedEpicIdAtom, newActive)
       }
     }
+
+    // Persist
+    set(scheduleUiStatePersistAtom)
   }
 )
 
@@ -549,6 +882,8 @@ export const setActiveTabAtom = atom(
     if (openTabs.includes(epicId)) {
       set(activeTabAtom, epicId)
       set(selectedEpicIdAtom, epicId)
+      // Persist
+      set(scheduleUiStatePersistAtom)
     }
   }
 )
@@ -560,6 +895,7 @@ export const setViewModeAtom = atom(
   null,
   (_get, set, epicId: string, mode: ViewMode) => {
     set(viewModePerEpicAtomFamily(epicId), mode)
+    // Note: viewModePerEpicAtomFamily setter already schedules persist
   }
 )
 
@@ -721,6 +1057,7 @@ export const updateTaskStatusAtom = atom(
 export const epicWizardOpenAtom = atom<boolean>(false)
 
 // ─── AI Suggestion Sidebar State ──────────────────────────────────────────────
+// These atoms intentionally stay in localStorage — they're not per-project critical state.
 
 /**
  * Controls visibility of the AI suggestion sidebar.

@@ -29,32 +29,9 @@ Build the onboarding wizard modal shell, implement steps 1-2 (Welcome + Interact
 ## Key context
 
 - `EpicCreationWizard.tsx` is the closest existing pattern — study its Dialog + AnimatePresence setup
-- IPC channel `FLOW_READ_PROJECT_CONTEXT` types already defined by Task 1 in `types.ts`
+- IPC channel `FLOW_READ_PROJECT_CONTEXT` types and handler already implemented by Task 1. Renderer calls `window.electronAPI.flowReadProjectContext(path)` which returns `FlowProjectContext | null` (type: `{ name: string, description?: string }`)
 - Old `OnboardingTutorial.tsx` at L128-137 in `TasksPage.tsx` uses `isFirstTimeUser` state — remove this entirely
-## Approach
-
-- Create `OnboardingWizard` component as a Radix Dialog modal
-- Follow the existing `EpicCreationWizard.tsx` pattern: Radix Dialog + Motion AnimatePresence `mode="wait"` + spring config `{ type: 'spring', stiffness: 600, damping: 49 }`
-- Props: `open`, `onOpenChange`, `projectPath`, `onComplete`
-- Step navigation: prev/next buttons, step indicator dots, progress bar
-- **Step 1 (Welcome)**:
-  - Explain the flow-next plan → work → review methodology
-  - Static content with illustrations/icons (use existing lucide-react icons)
-  - Add IPC to read README.md + package.json from the project directory for contextual framing (e.g., "Set up flow-next for <project-name>")
-  - Graceful fallback: if files unreadable, use generic welcome text
-- **Step 2 (Interactive Demo)**:
-  - Show a mock kanban board or task flow visualization with sample data
-  - Clickable elements that highlight how epics, tasks, and the AI-assisted workflow operate
-  - Use the project name from step 1 in demo content
-  - Static animations using Motion for polish
-- Trigger in `TasksPage.tsx`: when `activeProjectAtom.flowStatus === 'needs-setup'`, show the wizard
-- Wire up step state management (current step, completed steps, can-skip logic)
-
-## Key context
-
-- Replace the existing `OnboardingTutorial.tsx` (4-step spotlight overlay) — the new wizard supersedes it. Removal happens in Task 6 to avoid breaking existing flow during development.
-- The wizard shell handles all 5 steps but this task only implements steps 1-2. Steps 3-5 are wired as placeholder/pass-through that Task 5 will fill in.
-- `EpicCreationWizard.tsx` is the closest existing pattern — study its Dialog + AnimatePresence setup
+- `activeFlowProjectAtom` shape includes `error?: string` field for error state display
 ## Acceptance
 - [ ] `OnboardingWizard` component renders as a Radix Dialog modal
 - [ ] Wizard has step navigation (prev/next, indicator dots, progress bar)

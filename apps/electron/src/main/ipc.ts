@@ -2802,36 +2802,19 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
-  // Per-project UI state persistence
+  // Per-project UI state persistence (delegates to FlowBridge for serialized writes + gitignore)
   ipcMain.handle(IPC_CHANNELS.FLOW_UI_STATE_READ, async (_event, projectPath: string) => {
     const validation = validateProjectPath(projectPath)
     if (!validation.valid) return null
-    try {
-      const resolved = resolve(projectPath)
-      const statePath = join(resolved, '.flow', 'ui-state.json')
-      if (!existsSync(statePath)) return null
-      const content = await readFile(statePath, 'utf-8')
-      return JSON.parse(content)
-    } catch {
-      return null
-    }
+    const resolved = resolve(projectPath)
+    return getFlowBridge(resolved).readUiState()
   })
 
-  ipcMain.handle(IPC_CHANNELS.FLOW_UI_STATE_WRITE, async (_event, projectPath: string, state: Record<string, unknown>) => {
+  ipcMain.handle(IPC_CHANNELS.FLOW_UI_STATE_WRITE, async (_event, projectPath: string, state: import('../shared/types').FlowUiState) => {
     const validation = validateProjectPath(projectPath)
     if (!validation.valid) return { success: false, error: validation.error }
-    try {
-      const resolved = resolve(projectPath)
-      const flowDir = join(resolved, '.flow')
-      if (!existsSync(flowDir)) {
-        return { success: false, error: '.flow/ directory does not exist' }
-      }
-      const statePath = join(flowDir, 'ui-state.json')
-      await writeFile(statePath, JSON.stringify(state, null, 2), 'utf-8')
-      return { success: true }
-    } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
-    }
+    const resolved = resolve(projectPath)
+    return getFlowBridge(resolved).writeUiState(state)
   })
 
   // Project context (README.md + package.json analysis)

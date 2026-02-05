@@ -846,13 +846,15 @@ export interface FlowProjectContext {
 
 /**
  * Per-project UI state persisted to .flow/ui-state.json.
+ * Shape: { openTabs: ["fn-1-my-epic"], activeTab: "fn-1-my-epic", viewModePerEpic: { "fn-1-my-epic": "kanban" } }
+ *
+ * Note: suggestionSidebarOpen, dismissedSuggestions, epicReviewPromptShown stay in localStorage
+ * — they're not per-project critical state.
  */
 export interface FlowUiState {
-  selectedEpicId?: string | null
   openTabs?: string[]
   activeTab?: string | null
-  viewModeOverrides?: Record<string, string>
-  suggestionSidebarOpen?: boolean
+  viewModePerEpic?: Record<string, string>
 }
 
 // Re-import types for ElectronAPI

@@ -66,9 +66,8 @@ Create the foundational `activeFlowProjectAtom`, define ALL new IPC channel type
 - [ ] App typechecks (`bun run typecheck` in `apps/electron`)
 - [ ] App lints clean (`bun run lint` in `apps/electron`)
 ## Done summary
-TBD
-
+Implemented activeFlowProjectAtom and workspace-aware project management foundation. Created new IPC channels, Jotai atoms (activeFlowProjectAtom, registeredFlowProjectsAtom, syncFlowWatcherAtom), preload bridge methods, and validateProjectPath security helper. Replaced process.cwd() patterns with atom-based path resolution in TasksPage and AppShell. Added FlowWatcher lifecycle management with debounce on project switch.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 2997413, bdcb4d2, 4e0b14e
+- Tests: npx tsc --noEmit --project apps/electron/tsconfig.json
 - PRs:

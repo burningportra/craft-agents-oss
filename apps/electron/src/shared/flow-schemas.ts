@@ -61,6 +61,9 @@ export const EpicSummarySchema = z.object({
   status: EpicStatusSchema,
   tasks: z.number(),
   done: z.number(),
+  // Optional fields — may be present in newer flowctl versions
+  in_progress: z.number().optional(),
+  updated_at: z.string().optional(),
 })
 export type EpicSummary = z.infer<typeof EpicSummarySchema>
 

@@ -1,6 +1,8 @@
 import { execFile } from 'child_process'
 import { existsSync, unlinkSync, readdirSync } from 'fs'
+import { readFile, writeFile } from 'fs/promises'
 import { join } from 'path'
+import type { FlowUiState } from '../../shared/types'
 import {
   CommandSuccessSchema,
   EpicListResponseSchema,
@@ -232,6 +234,74 @@ export class FlowBridge {
       content,
       EpicSetPlanResponseSchema
     )
+  }
+
+  // ─── UI State Persistence ───────────────────────────────────────────
+
+  /**
+   * Read per-project UI state from .flow/ui-state.json.
+   * Returns null if file doesn't exist or is invalid JSON.
+   */
+  async readUiState(): Promise<FlowUiState | null> {
+    try {
+      const statePath = join(this.workspaceRoot, '.flow', 'ui-state.json')
+      if (!existsSync(statePath)) return null
+      const content = await readFile(statePath, 'utf-8')
+      return JSON.parse(content) as FlowUiState
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Write per-project UI state to .flow/ui-state.json.
+   * Serialized through the write queue to prevent file lock contention.
+   * Also ensures ui-state.json is in .flow/.gitignore.
+   */
+  writeUiState(state: FlowUiState): Promise<{ success: boolean; error?: string }> {
+    const writeOperation = async (): Promise<{ success: boolean; error?: string }> => {
+      try {
+        const flowDir = join(this.workspaceRoot, '.flow')
+        if (!existsSync(flowDir)) {
+          return { success: false, error: '.flow/ directory does not exist' }
+        }
+        const statePath = join(flowDir, 'ui-state.json')
+        await writeFile(statePath, JSON.stringify(state, null, 2), 'utf-8')
+        // Ensure ui-state.json is in .flow/.gitignore
+        await this.ensureGitignoreEntry(flowDir, 'ui-state.json')
+        return { success: true }
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
+      }
+    }
+
+    const promise = this.writeQueue.then(writeOperation)
+    this.writeQueue = promise.catch((err) => {
+      console.error('[FlowBridge] UI state write failed:', err)
+    })
+    return promise
+  }
+
+  /**
+   * Ensure a line exists in .flow/.gitignore.
+   * Creates the file if it doesn't exist.
+   */
+  private async ensureGitignoreEntry(flowDir: string, entry: string): Promise<void> {
+    const gitignorePath = join(flowDir, '.gitignore')
+    try {
+      if (existsSync(gitignorePath)) {
+        const content = await readFile(gitignorePath, 'utf-8')
+        const lines = content.split('\n').map(l => l.trim())
+        if (lines.includes(entry)) return
+        // Append entry
+        const separator = content.endsWith('\n') ? '' : '\n'
+        await writeFile(gitignorePath, content + separator + entry + '\n', 'utf-8')
+      } else {
+        await writeFile(gitignorePath, entry + '\n', 'utf-8')
+      }
+    } catch {
+      // Best-effort — don't fail the write operation for a gitignore issue
+    }
   }
 
   /** Delete an epic and its tasks by removing files directly */
