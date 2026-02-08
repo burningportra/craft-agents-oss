@@ -1084,6 +1084,35 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
 
       {/* Input area — no attachment buttons for epic chat */}
       <div className="p-3 border-t border-border/50 space-y-2">
+        {/* Dynamic starter suggestions — shown even when messages exist */}
+        {messages.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {getStarterPrompts(tasks).map((starter) => (
+              <button
+                key={starter.label}
+                onClick={() => {
+                  if (starter.command) {
+                    handleInsertCommand(starter.command)
+                  } else if (starter.message) {
+                    handleSendMessage(starter.message)
+                  }
+                }}
+                disabled={isProcessing}
+                className={cn(
+                  'px-2 py-1 rounded-full text-[11px]',
+                  'bg-foreground/5 hover:bg-foreground/10',
+                  'text-foreground/60 hover:text-foreground',
+                  'border border-border/30 hover:border-border/50',
+                  'transition-colors duration-150 cursor-pointer',
+                  'max-w-[200px] truncate',
+                  'disabled:opacity-50 disabled:cursor-not-allowed'
+                )}
+              >
+                {starter.label}
+              </button>
+            ))}
+          </div>
+        )}
         <ChatActionButtons
           onInsertCommand={handleInsertCommand}
           disabled={isProcessing}

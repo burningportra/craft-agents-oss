@@ -439,61 +439,54 @@ export async function executeChat(params: EpicChatParams): Promise<void> {
       systemPrompt += `\n## Project Learnings\n${learnings}\n`
     }
 
-    // Get API key from credential manager (never send to renderer)
-    const { getCredentialManager } = await import('@craft-agent/shared/credentials')
-    const apiKey = await getCredentialManager().getApiKey()
+    // Use the Claude Agent SDK query() — same subprocess + auth as the native chat.
+    // This handles API key, OAuth, and custom base URLs identically.
+    const { query } = await import('@anthropic-ai/claude-agent-sdk')
+    const { resolveModelId, loadStoredConfig, DEFAULT_MODEL } = await import('@craft-agent/shared/config')
 
-    if (!apiKey) {
-      sendEvent({
-        type: 'error',
-        errorType: 'auth',
-        message: 'No API key configured. Please set up your API key in Settings.',
-      })
-      return
+    const config = loadStoredConfig()
+    const model = resolveModelId(config?.model || DEFAULT_MODEL)
+
+    // Build the full prompt with conversation history baked in
+    let prompt = message
+    if (history.length > 0) {
+      const historyBlock = history
+        .map((m) => `<${m.role}>\n${m.content}\n</${m.role}>`)
+        .join('\n\n')
+      prompt = `Here is the conversation so far:\n\n${historyBlock}\n\nNow respond to the latest user message:\n\n${message}`
     }
 
-    // Use DEFAULT_MODEL constant
-    const { DEFAULT_MODEL } = await import('@craft-agent/shared/config')
-
-    // Create Anthropic client with explicit API key
-    const { Anthropic } = await import('@anthropic-ai/sdk')
-    const client = new Anthropic({ apiKey })
-
-    // Build messages array from history + current message
-    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
-      ...history,
-      { role: 'user' as const, content: message },
-    ]
-
-    // Stream the response
-    const stream = client.messages.stream({
-      model: DEFAULT_MODEL,
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages,
+    const q = query({
+      prompt,
+      options: {
+        systemPrompt,
+        model,
+        tools: [],
+        maxTurns: 1,
+        persistSession: false,
+        includePartialMessages: true,
+        abortController,
+      },
     })
 
-    // Set up abort handling
-    const onAbort = () => {
-      stream.abort()
-    }
-    abortController.signal.addEventListener('abort', onAbort)
+    // Stream SDK messages, forwarding text deltas to the renderer
+    for await (const sdkMessage of q) {
+      if (abortController.signal.aborted) break
 
-    try {
-      // Forward text events to renderer
-      stream.on('text', (text) => {
-        if (abortController.signal.aborted) return
-        sendEvent({ type: 'text_delta', text })
-      })
-
-      // Wait for completion
-      await stream.finalMessage()
-
-      if (!abortController.signal.aborted) {
-        sendEvent({ type: 'text_complete' })
+      if (sdkMessage.type === 'stream_event') {
+        const event = sdkMessage.event
+        // content_block_delta with text_delta carries the streaming text
+        if (event.type === 'content_block_delta' && 'delta' in event) {
+          const delta = event.delta as { type: string; text?: string }
+          if (delta.type === 'text_delta' && delta.text) {
+            sendEvent({ type: 'text_delta', text: delta.text })
+          }
+        }
       }
-    } finally {
-      abortController.signal.removeEventListener('abort', onAbort)
+    }
+
+    if (!abortController.signal.aborted) {
+      sendEvent({ type: 'text_complete' })
     }
   } catch (error) {
     // Don't send error events if the stream was intentionally aborted
