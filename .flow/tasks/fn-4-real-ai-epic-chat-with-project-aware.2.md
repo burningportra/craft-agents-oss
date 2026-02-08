@@ -13,7 +13,8 @@ Replace `simulateAIResponse()` in `EpicChatPanel.tsx` with real IPC calls to the
 
 - Delete `simulateAIResponse()` function at `EpicChatPanel.tsx:620-674`
 - In `handleSend()` at `EpicChatPanel.tsx:250-310`:
-  - For ALL commands (interview, review, chat): call `window.electronAPI.flowEpicChatSend({ epicId, commandType, message, history })` where `history` is the last 20 messages from `messages` state (truncate before sending over IPC)
+  - For ALL commands (interview, review, chat): call `window.electronAPI.flowEpicChatSend(workspaceRoot, epicId, commandType, message, history)` where `history` is the last 20 messages from `messages` state (truncate before sending over IPC)
+  <!-- Updated by plan-sync: fn-4-real-ai-epic-chat-with-project-aware.1 uses separate parameters for workspaceRoot instead of object parameter -->
   - Remove the branching at L281-283 that only routes `/plan` to real IPC
   - Keep `/plan` routing to existing `FLOW_EPIC_PLAN` channel (don't change that)
   - Do NOT render attachment buttons in the epic chat input (unlike main session chat)
@@ -22,7 +23,8 @@ Replace `simulateAIResponse()` in `EpicChatPanel.tsx` with real IPC calls to the
   - On `text_complete`: call `setMessages((prev) => [...prev])` to trigger re-render with final content, then call `saveMessages()` in a `setTimeout(0)` to ensure state has flushed. Set `isProcessing(false)`
   - On `error`: keep user's message in history, add an assistant error message bubble with a "Retry" button. The retry button should re-send the same user message with the same history. Show actionable error info (e.g., "Rate limited — retry in 30s", "Check API key in Settings")
 - **Stale closure fix**: Use `useRef` to track latest messages during streaming. In `saveMessages`, read from the ref instead of relying on closure. Alternatively, refactor `saveMessages` in `EpicChatHistory.tsx` to accept messages as a parameter: `saveMessages(messagesToSave)`.
-- Add a "Stop" button visible during `isProcessing` — calls `window.electronAPI.flowEpicChatAbort(epicId)`. Apply `titlebar-no-drag` class if button is in the top 50px (per `.flow/memory/electron-titlebar-clickability.md`)
+- Add a "Stop" button visible during `isProcessing` — calls `window.electronAPI.flowEpicChatAbort(workspaceRoot, epicId)`. Apply `titlebar-no-drag` class if button is in the top 50px (per `.flow/memory/electron-titlebar-clickability.md`)
+  <!-- Updated by plan-sync: fn-4-real-ai-epic-chat-with-project-aware.1 implementation requires workspaceRoot parameter -->
 - Handle epic switching: in `useEffect` cleanup or when `epicId` changes, call abort if `isProcessing`
 - Auto-scroll: only scroll to bottom when user is near bottom (within 100px). When user is scrolled up >100px and new messages arrive, show a "scroll to bottom" button in the bottom-right corner of the ScrollArea (small circular button with ChevronDown icon). Click scrolls to bottom.
 
@@ -38,14 +40,14 @@ Replace `simulateAIResponse()` in `EpicChatPanel.tsx` with real IPC calls to the
 
 - Delete `simulateAIResponse()` function at `EpicChatPanel.tsx:620-674`
 - In `handleSend()` at `EpicChatPanel.tsx:250-310`:
-  - For ALL commands (interview, review, chat): call `window.electronAPI.flowEpicChatSend({ epicId, commandType, message, history })` where `history` is the last 20 messages from `messages` state
+  - For ALL commands (interview, review, chat): call `window.electronAPI.flowEpicChatSend(workspaceRoot, epicId, commandType, message, history)` where `history` is the last 20 messages from `messages` state
   - Remove the branching at L281-283 that only routes `/plan` to real IPC
   - Keep `/plan` routing to existing `FLOW_EPIC_PLAN` channel (don't change that)
 - Set up streaming listener: `window.electronAPI.onFlowEpicChatStatus((event) => { ... })` in `useEffect`, following the pattern at `EpicChatPanel.tsx:166-190` for plan status events
   - On `text_delta`: call `updateLastMessage(prevContent + event.text)` from `useEpicChatHistory`
   - On `text_complete`: call `saveMessages()`, set `isProcessing(false)`
   - On `error`: show error in chat as a special error message bubble with retry button
-- Add a "Stop" button visible during `isProcessing` — calls `window.electronAPI.flowEpicChatAbort(epicId)`
+- Add a "Stop" button visible during `isProcessing` — calls `window.electronAPI.flowEpicChatAbort(workspaceRoot, epicId)`
 - Handle epic switching: in `useEffect` cleanup or when `epicId` changes, call abort if `isProcessing`
 - Auto-scroll: only scroll to bottom when user is near bottom (within 100px), show "scroll to bottom" indicator when new messages arrive and user is scrolled up
 - Before sending history over IPC, truncate to last 20 messages to stay within token budget

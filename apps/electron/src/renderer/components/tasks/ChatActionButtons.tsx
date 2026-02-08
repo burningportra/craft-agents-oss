@@ -114,20 +114,3 @@ export function parseSlashCommand(input: string): {
 
   return { command: null, args: trimmed }
 }
-
-/**
- * Get the system prompt prefix for a slash command.
- * This guides the AI to perform the specific operation.
- */
-export function getCommandSystemPrompt(command: SlashCommand, epicId: string): string {
-  switch (command) {
-    case 'plan':
-      return `You are helping plan the epic "${epicId}". Generate a detailed implementation plan with tasks, dependencies, and acceptance criteria. Consider the existing codebase context and project structure.`
-    case 'interview':
-      return `You are conducting a requirements interview for the epic "${epicId}". Ask clarifying questions to understand the scope, requirements, and constraints. Focus on uncovering edge cases and potential issues.`
-    case 'review':
-      return `You are reviewing the epic "${epicId}". Analyze the plan completeness, task dependencies, and implementation readiness. Identify any gaps, risks, or suggestions for improvement.`
-    default:
-      return ''
-  }
-}

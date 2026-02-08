@@ -76,9 +76,19 @@ Create a new `epic-chat-agent.ts` module in the main process that handles all ep
 - [ ] API key never sent to renderer process (IPC payloads verified to not include credentials)
 - [ ] TypeScript compiles with no errors (`bun run typecheck`)
 ## Done summary
-TBD
+## Summary
 
+Created `epic-chat-agent.ts` with full streaming LLM integration for epic chat. Added 3 IPC channels (FLOW_EPIC_CHAT_SEND, FLOW_EPIC_CHAT_STATUS, FLOW_EPIC_CHAT_ABORT) following the established 3-file pattern (types.ts, ipc.ts, preload/index.ts).
+
+Key implementation details:
+- `executeChat()` function handles all command types (interview, review, chat) with streaming via `client.messages.stream()`
+- `buildSystemPrompt()` is modular with `extraContext?` parameter for Task 4 extension
+- Uses `getCredentialManager().getApiKey()` (not env var)
+- Uses `DEFAULT_MODEL` from `@craft-agent/shared/config` (not hardcoded)
+- AbortController tracked per `${workspaceRoot}:${epicId}`
+- Error classification maps API errors to typed events (rate_limit, auth, network, invalid_response)
+- Text deltas streamed via `webContents.send('flow:epic-chat-status', event)`
 ## Evidence
 - Commits:
-- Tests:
+- Tests: typecheck passed (worker verified)
 - PRs:

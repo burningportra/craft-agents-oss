@@ -9,6 +9,9 @@
  * - Write-with-confirmation for task mutations
  * - Auto-save draft on blur/tab switch
  * - Animated slide-in/out panel (320px fixed width)
+ * - Real streaming LLM via IPC for /interview, /review, free-form chat
+ * - Stop button for aborting in-flight streams
+ * - Auto-scroll with "scroll to bottom" indicator
  */
 
 import * as React from 'react'
@@ -16,12 +19,25 @@ import { motion, AnimatePresence } from 'motion/react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { atomWithStorage } from 'jotai/utils'
 import { atomFamily } from 'jotai-family'
-import { MessageCircle, Send, Trash2, Bot, User, X, CheckCircle2, RotateCcw, Loader2 } from 'lucide-react'
+import {
+  MessageCircle,
+  Send,
+  Trash2,
+  Bot,
+  User,
+  X,
+  CheckCircle2,
+  RotateCcw,
+  Loader2,
+  Square,
+  ChevronDown,
+  AlertCircle,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Textarea } from '@/components/ui/textarea'
-import { Markdown } from '@/components/markdown'
+import { StreamingMarkdown, Markdown } from '@/components/markdown'
 import {
   useEpicChatHistory,
   type EpicChatMessage,
@@ -29,8 +45,6 @@ import {
 import {
   ChatActionButtons,
   parseSlashCommand,
-  getCommandSystemPrompt,
-  type SlashCommand,
 } from './ChatActionButtons'
 import {
   WriteConfirmation,
@@ -38,6 +52,15 @@ import {
   type TaskMutation,
 } from './WriteConfirmation'
 import { epicsAtom, tasksAtomFamily, loadTasksAtom } from '@/atoms/tasks-state'
+import type { ChatCommandType, EpicChatEvent } from '../../../main/lib/epic-chat-agent'
+
+// ─── Constants ──────────────────────────────────────────────────────────────
+
+/** Max messages to send over IPC to stay within token budget */
+const MAX_HISTORY_MESSAGES = 20
+
+/** Scroll threshold in px — auto-scroll only when within this distance of bottom */
+const AUTO_SCROLL_THRESHOLD = 100
 
 // ─── Atoms ────────────────────────────────────────────────────────────────────
 
@@ -79,13 +102,51 @@ export interface EpicChatPanelProps {
   className?: string
 }
 
+// ─── Error Message Bubble ────────────────────────────────────────────────────
+
+interface ErrorMessageBubbleProps {
+  message: EpicChatMessage
+  onRetry: () => void
+}
+
+function ErrorMessageBubble({ message, onRetry }: ErrorMessageBubbleProps) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2 }}
+      className="flex gap-2 items-start"
+    >
+      <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center bg-destructive/10 text-destructive">
+        <AlertCircle className="h-3.5 w-3.5" />
+      </div>
+      <div className="flex-1 min-w-0 px-3 py-2 rounded-lg text-sm bg-destructive/5 text-foreground mr-8 border border-destructive/20">
+        <p className="text-xs text-destructive">{message.content}</p>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onRetry}
+          className="h-6 px-2 mt-1.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+        >
+          <RotateCcw className="h-3 w-3 mr-1" />
+          Retry
+        </Button>
+        <p className="text-[10px] text-muted-foreground mt-1">
+          {new Date(message.timestamp).toLocaleTimeString()}
+        </p>
+      </div>
+    </motion.div>
+  )
+}
+
 // ─── Message Bubble ───────────────────────────────────────────────────────────
 
 interface MessageBubbleProps {
   message: EpicChatMessage
+  isStreaming?: boolean
 }
 
-function MessageBubble({ message }: MessageBubbleProps) {
+function MessageBubble({ message, isStreaming = false }: MessageBubbleProps) {
   const isUser = message.role === 'user'
 
   return (
@@ -116,6 +177,8 @@ function MessageBubble({ message }: MessageBubbleProps) {
       >
         {isUser ? (
           <p className="whitespace-pre-wrap break-words">{message.content}</p>
+        ) : isStreaming ? (
+          <StreamingMarkdown content={message.content} isStreaming={true} />
         ) : (
           <Markdown>{message.content}</Markdown>
         )}
@@ -143,16 +206,20 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
 
   const {
     messages,
+    setMessages,
     isLoading,
     addMessage,
+    updateLastMessage,
     saveMessages,
     clearHistory,
   } = useEpicChatHistory(epicId)
 
   const [draft, setDraft] = useAtom(chatDraftAtomFamily(epicId))
   const [isProcessing, setIsProcessing] = React.useState(false)
+  const [isStreaming, setIsStreaming] = React.useState(false)
   const [pendingMutation, setPendingMutation] = React.useState<TaskMutation | null>(null)
   const [isApplyingMutation, setIsApplyingMutation] = React.useState(false)
+  const [showScrollButton, setShowScrollButton] = React.useState(false)
 
   // PRD-002: Plan approval state
   const [hasPendingPlan, setHasPendingPlan] = React.useState(false)
@@ -161,6 +228,140 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
 
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
   const scrollRef = React.useRef<HTMLDivElement>(null)
+
+  // Refs for streaming state — avoid stale closures
+  const streamContentRef = React.useRef('')
+  const messagesRef = React.useRef(messages)
+  const isProcessingRef = React.useRef(false)
+  const lastSendParamsRef = React.useRef<{
+    message: string
+    commandType: ChatCommandType
+    history: Array<{ role: string; content: string }>
+  } | null>(null)
+
+  // Keep messagesRef in sync
+  React.useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
+
+  // Keep isProcessingRef in sync
+  React.useEffect(() => {
+    isProcessingRef.current = isProcessing
+  }, [isProcessing])
+
+  // ─── Auto-scroll logic ──────────────────────────────────────────────────
+
+  const isNearBottom = React.useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return true
+    return el.scrollHeight - el.scrollTop - el.clientHeight < AUTO_SCROLL_THRESHOLD
+  }, [])
+
+  const scrollToBottom = React.useCallback(() => {
+    const el = scrollRef.current
+    if (el) {
+      el.scrollTop = el.scrollHeight
+    }
+    setShowScrollButton(false)
+  }, [])
+
+  // Track scroll position for "scroll to bottom" button
+  const handleScroll = React.useCallback(() => {
+    if (isNearBottom()) {
+      setShowScrollButton(false)
+    }
+  }, [isNearBottom])
+
+  // Auto-scroll when messages change (only if near bottom)
+  React.useEffect(() => {
+    if (isNearBottom()) {
+      scrollToBottom()
+    } else if (messages.length > 0) {
+      setShowScrollButton(true)
+    }
+  }, [messages, isNearBottom, scrollToBottom])
+
+  // Attach scroll listener
+  React.useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    el.addEventListener('scroll', handleScroll, { passive: true })
+    return () => el.removeEventListener('scroll', handleScroll)
+  }, [handleScroll])
+
+  // ─── Streaming listener ──────────────────────────────────────────────────
+
+  React.useEffect(() => {
+    const unsubscribe = window.electronAPI.onFlowEpicChatStatus((event: EpicChatEvent & { epicId: string }) => {
+      if (event.epicId !== epicId) return
+
+      switch (event.type) {
+        case 'text_delta':
+          streamContentRef.current += event.text
+          updateLastMessage(streamContentRef.current)
+          // Auto-scroll during streaming if near bottom
+          if (isNearBottom()) {
+            requestAnimationFrame(() => scrollToBottom())
+          }
+          break
+
+        case 'text_complete':
+          setIsStreaming(false)
+          setIsProcessing(false)
+          // Save with the final messages — use setTimeout to let state flush
+          setTimeout(() => {
+            const currentMessages = messagesRef.current
+            saveMessages(currentMessages)
+          }, 0)
+          break
+
+        case 'error': {
+          setIsStreaming(false)
+          setIsProcessing(false)
+          streamContentRef.current = ''
+
+          // Format error message based on type
+          const errorMessage = event.message
+
+          // If the last message is an empty assistant placeholder, replace it with error
+          setMessages((prev) => {
+            const lastMsg = prev[prev.length - 1]
+            if (lastMsg && lastMsg.role === 'assistant' && lastMsg.content === '') {
+              // Replace the empty placeholder with an error message
+              const updated = [...prev]
+              updated[updated.length - 1] = {
+                ...lastMsg,
+                content: errorMessage,
+                // Mark as error by prefixing content (used in rendering)
+                id: `error-${lastMsg.id}`,
+              }
+              return updated
+            }
+            // Otherwise add a new error message
+            return [...prev, {
+              id: `error-${crypto.randomUUID()}`,
+              role: 'assistant' as const,
+              content: errorMessage,
+              timestamp: Date.now(),
+            }]
+          })
+          break
+        }
+      }
+    })
+
+    return unsubscribe
+  }, [epicId, updateLastMessage, saveMessages, setMessages, isNearBottom, scrollToBottom])
+
+  // ─── Epic switch abort ──────────────────────────────────────────────────
+
+  React.useEffect(() => {
+    return () => {
+      if (isProcessingRef.current) {
+        window.electronAPI.flowEpicChatAbort(workspaceRoot, epicId)
+      }
+    }
+  }, [epicId, workspaceRoot])
 
   // PRD-002: Listen for plan progress events
   React.useEffect(() => {
@@ -198,7 +399,7 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
         setHasPendingPlan(false)
         await addMessage({
           role: 'assistant',
-          content: '✅ Plan approved! Tasks have been created. Check the task board.',
+          content: 'Plan approved! Tasks have been created. Check the task board.',
         })
         await saveMessages()
         // Reload tasks to show newly created tasks
@@ -228,13 +429,6 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
     textareaRef.current?.focus()
   }, [setDraft])
 
-  // Auto-scroll to bottom when new messages arrive
-  React.useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [messages])
-
   // Handle command insertion from action buttons
   const handleInsertCommand = React.useCallback((command: string) => {
     setDraft((prev) => {
@@ -247,6 +441,62 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
     textareaRef.current?.focus()
   }, [setDraft])
 
+  // Handle stop button
+  const handleStop = React.useCallback(() => {
+    window.electronAPI.flowEpicChatAbort(workspaceRoot, epicId)
+    setIsStreaming(false)
+    setIsProcessing(false)
+    // Save whatever partial content we have
+    setTimeout(() => {
+      const currentMessages = messagesRef.current
+      saveMessages(currentMessages)
+    }, 0)
+  }, [workspaceRoot, epicId, saveMessages])
+
+  // Handle retry — re-send the last user message
+  const handleRetry = React.useCallback(() => {
+    const params = lastSendParamsRef.current
+    if (!params) return
+
+    // Remove the error message from history
+    setMessages((prev) => {
+      const lastMsg = prev[prev.length - 1]
+      if (lastMsg && lastMsg.id.startsWith('error-')) {
+        return prev.slice(0, -1)
+      }
+      return prev
+    })
+
+    // Re-send the message
+    setIsProcessing(true)
+    setIsStreaming(true)
+    streamContentRef.current = ''
+
+    // Add empty assistant placeholder for streaming
+    const placeholderMessage: EpicChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now(),
+    }
+    setMessages((prev) => [...prev, placeholderMessage])
+
+    // Truncate history to last MAX_HISTORY_MESSAGES
+    const currentMessages = messagesRef.current
+    const historySlice = currentMessages
+      .filter((m) => !m.id.startsWith('error-'))
+      .slice(-MAX_HISTORY_MESSAGES)
+      .map((m) => ({ role: m.role, content: m.content }))
+
+    window.electronAPI.flowEpicChatSend(
+      workspaceRoot,
+      epicId,
+      params.commandType,
+      params.message,
+      historySlice
+    )
+  }, [workspaceRoot, epicId, setMessages])
+
   // Handle send message
   const handleSend = React.useCallback(async () => {
     const trimmed = draft.trim()
@@ -258,56 +508,78 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
     // Add user message
     await addMessage({ role: 'user', content: trimmed })
     setDraft('')
-    setIsProcessing(true)
 
-    try {
-      // Build context for the AI
-      const epicContext = epic
-        ? `Epic: ${epic.title} (${epic.id})\nStatus: ${epic.status}\nProgress: ${epic.done}/${epic.tasks} tasks done`
-        : `Epic: ${epicId}`
+    // /plan uses the existing planning agent channel (unchanged)
+    if (command === 'plan') {
+      setIsProcessing(true)
+      try {
+        const response = await executePlanCommand(epicId, workspaceRoot)
+        await addMessage({ role: 'assistant', content: response })
 
-      const taskContext = tasks.length > 0
-        ? `\n\nTasks:\n${tasks.map((t) => `- ${t.id}: ${t.title} [${t.status}]`).join('\n')}`
-        : ''
+        if (!response.startsWith('Failed to generate plan')) {
+          setHasPendingPlan(true)
+        }
 
-      // Build system prompt
-      const systemPrompt = command
-        ? getCommandSystemPrompt(command, epicId)
-        : `You are helping with the epic "${epicId}". You have access to task management operations. When you want to propose a task mutation, output it in a mutation code block.`
+        const mutation = parseMutationFromResponse(response)
+        if (mutation) {
+          setPendingMutation(mutation)
+        }
 
-      const fullPrompt = `${systemPrompt}\n\nContext:\n${epicContext}${taskContext}\n\nUser message: ${args || trimmed}`
-
-      // PRD-002: /plan uses real planning agent; others still simulated
-      const response = command === 'plan'
-        ? await executePlanCommand(epicId, workspaceRoot)
-        : await simulateAIResponse(command, epicId, fullPrompt)
-
-      // Add assistant message
-      await addMessage({ role: 'assistant', content: response })
-
-      // PRD-002: Show approval bar after successful /plan
-      if (command === 'plan' && !response.startsWith('Failed to generate plan')) {
-        setHasPendingPlan(true)
+        await saveMessages()
+      } catch (error) {
+        console.error('[EpicChatPanel] Error executing plan:', error)
+        await addMessage({
+          role: 'assistant',
+          content: 'Sorry, I encountered an error processing your request. Please try again.',
+        })
+      } finally {
+        setIsProcessing(false)
       }
-
-      // Check for mutations in the response
-      const mutation = parseMutationFromResponse(response)
-      if (mutation) {
-        setPendingMutation(mutation)
-      }
-
-      // Save messages after adding assistant response
-      await saveMessages()
-    } catch (error) {
-      console.error('[EpicChatPanel] Error processing message:', error)
-      await addMessage({
-        role: 'assistant',
-        content: 'Sorry, I encountered an error processing your request. Please try again.',
-      })
-    } finally {
-      setIsProcessing(false)
+      return
     }
-  }, [draft, isProcessing, addMessage, setDraft, epic, epicId, tasks, saveMessages])
+
+    // All other commands use real streaming agent
+    setIsProcessing(true)
+    setIsStreaming(true)
+    streamContentRef.current = ''
+
+    // Determine command type for IPC
+    const commandType: ChatCommandType = command === 'interview'
+      ? 'interview'
+      : command === 'review'
+        ? 'review'
+        : 'chat'
+
+    const userMessage = args || trimmed
+
+    // Add empty assistant message placeholder for streaming
+    const placeholderMessage: EpicChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now(),
+    }
+    setMessages((prev) => [...prev, placeholderMessage])
+
+    // Truncate history to last MAX_HISTORY_MESSAGES (exclude the placeholder)
+    const currentMessages = messagesRef.current
+    const historySlice = currentMessages
+      .filter((m) => m.content !== '' && !m.id.startsWith('error-'))
+      .slice(-MAX_HISTORY_MESSAGES)
+      .map((m) => ({ role: m.role, content: m.content }))
+
+    // Store send params for retry
+    lastSendParamsRef.current = { message: userMessage, commandType, history: historySlice }
+
+    // Fire-and-forget IPC call — streaming events come back via onFlowEpicChatStatus
+    window.electronAPI.flowEpicChatSend(
+      workspaceRoot,
+      epicId,
+      commandType,
+      userMessage,
+      historySlice
+    )
+  }, [draft, isProcessing, addMessage, setDraft, epicId, workspaceRoot, saveMessages, setMessages])
 
   // Handle mutation apply
   const handleApplyMutation = React.useCallback(async (mutation: TaskMutation) => {
@@ -388,6 +660,17 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
       <div className="shrink-0 flex items-center gap-2 px-3 py-3 border-b border-border/50 titlebar-no-drag">
         <MessageCircle className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-medium flex-1">Epic Chat</span>
+        {isProcessing && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 titlebar-no-drag text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={handleStop}
+            title="Stop generating"
+          >
+            <Square className="h-3 w-3 fill-current" />
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon"
@@ -410,51 +693,94 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1" viewportRef={scrollRef as React.RefObject<HTMLDivElement>}>
-        <div className="p-3 space-y-3">
-          {messages.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-40" />
-              <p className="text-sm">Start a conversation about this epic</p>
-              <p className="text-xs mt-1">
-                Use /plan, /interview, or /review commands
-              </p>
-            </div>
-          ) : (
-            messages.map((message) => (
-              <MessageBubble key={message.id} message={message} />
-            ))
-          )}
-
-          {/* Processing indicator */}
-          {isProcessing && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex items-center gap-2 text-muted-foreground text-sm"
-            >
-              <div className="flex gap-1">
-                <motion.div
-                  animate={{ y: [0, -4, 0] }}
-                  transition={{ duration: 0.6, repeat: Infinity, delay: 0 }}
-                  className="w-1.5 h-1.5 rounded-full bg-current"
-                />
-                <motion.div
-                  animate={{ y: [0, -4, 0] }}
-                  transition={{ duration: 0.6, repeat: Infinity, delay: 0.1 }}
-                  className="w-1.5 h-1.5 rounded-full bg-current"
-                />
-                <motion.div
-                  animate={{ y: [0, -4, 0] }}
-                  transition={{ duration: 0.6, repeat: Infinity, delay: 0.2 }}
-                  className="w-1.5 h-1.5 rounded-full bg-current"
-                />
+      <div className="relative flex-1 overflow-hidden">
+        <ScrollArea className="h-full" viewportRef={scrollRef as React.RefObject<HTMLDivElement>}>
+          <div className="p-3 space-y-3">
+            {messages.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                <p className="text-sm">Start a conversation about this epic</p>
+                <p className="text-xs mt-1">
+                  Use /plan, /interview, or /review commands
+                </p>
               </div>
-              <span>Thinking...</span>
+            ) : (
+              messages.map((message, index) => {
+                const isLastMessage = index === messages.length - 1
+                const isErrorMessage = message.id.startsWith('error-')
+
+                if (isErrorMessage) {
+                  return (
+                    <ErrorMessageBubble
+                      key={message.id}
+                      message={message}
+                      onRetry={handleRetry}
+                    />
+                  )
+                }
+
+                return (
+                  <MessageBubble
+                    key={message.id}
+                    message={message}
+                    isStreaming={isLastMessage && isStreaming && message.role === 'assistant'}
+                  />
+                )
+              })
+            )}
+
+            {/* Processing indicator (shown when waiting for first token) */}
+            {isProcessing && !isStreaming && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex items-center gap-2 text-muted-foreground text-sm"
+              >
+                <div className="flex gap-1">
+                  <motion.div
+                    animate={{ y: [0, -4, 0] }}
+                    transition={{ duration: 0.6, repeat: Infinity, delay: 0 }}
+                    className="w-1.5 h-1.5 rounded-full bg-current"
+                  />
+                  <motion.div
+                    animate={{ y: [0, -4, 0] }}
+                    transition={{ duration: 0.6, repeat: Infinity, delay: 0.1 }}
+                    className="w-1.5 h-1.5 rounded-full bg-current"
+                  />
+                  <motion.div
+                    animate={{ y: [0, -4, 0] }}
+                    transition={{ duration: 0.6, repeat: Infinity, delay: 0.2 }}
+                    className="w-1.5 h-1.5 rounded-full bg-current"
+                  />
+                </div>
+                <span>Thinking...</span>
+              </motion.div>
+            )}
+          </div>
+        </ScrollArea>
+
+        {/* Scroll to bottom button */}
+        <AnimatePresence>
+          {showScrollButton && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="absolute bottom-2 right-4"
+            >
+              <Button
+                variant="secondary"
+                size="icon"
+                className="h-7 w-7 rounded-full shadow-md"
+                onClick={scrollToBottom}
+                title="Scroll to bottom"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </Button>
             </motion.div>
           )}
-        </div>
-      </ScrollArea>
+        </AnimatePresence>
+      </div>
 
       {/* Pending mutation */}
       <AnimatePresence>
@@ -539,7 +865,7 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
         )}
       </AnimatePresence>
 
-      {/* Input area */}
+      {/* Input area — no attachment buttons for epic chat */}
       <div className="p-3 border-t border-border/50 space-y-2">
         <ChatActionButtons
           onInsertCommand={handleInsertCommand}
@@ -555,27 +881,35 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
             disabled={isProcessing}
             className="min-h-[60px] max-h-[120px] resize-none"
           />
-          <Button
-            variant="default"
-            size="icon"
-            onClick={handleSend}
-            disabled={!draft.trim() || isProcessing}
-            className="h-[60px] w-10 shrink-0"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
+          {isProcessing ? (
+            <Button
+              variant="destructive"
+              size="icon"
+              onClick={handleStop}
+              className="h-[60px] w-10 shrink-0"
+              title="Stop generating"
+            >
+              <Square className="h-4 w-4 fill-current" />
+            </Button>
+          ) : (
+            <Button
+              variant="default"
+              size="icon"
+              onClick={handleSend}
+              disabled={!draft.trim() || isProcessing}
+              className="h-[60px] w-10 shrink-0"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
     </div>
   )
 }
 
-// ─── AI Response Simulation ───────────────────────────────────────────────────
+// ─── Plan Command ────────────────────────────────────────────────────────────
 
-/**
- * Simulate AI response for demo purposes.
- * In production, this would call the actual AI service via IPC.
- */
 /**
  * Execute the /plan command via IPC to the planning agent.
  * Returns a formatted markdown response with the task breakdown.
@@ -615,62 +949,6 @@ ${taskLines}
 
 ---
 **${tasks.length} tasks generated.** Click **Approve Plan** to create these as flowctl tasks, or edit the plan and re-run \`/plan\`.`
-}
-
-/**
- * Simulate AI response for non-plan commands (interview, review).
- * TODO: Wire these to real agent calls in future PRDs.
- */
-async function simulateAIResponse(
-  command: SlashCommand,
-  epicId: string,
-  _prompt: string
-): Promise<string> {
-  // Simulate network delay
-  await new Promise((resolve) => setTimeout(resolve, 1000 + Math.random() * 1000))
-
-  switch (command) {
-    case 'interview':
-      return `I have a few questions to better understand the requirements for **${epicId}**:
-
-1. What is the primary user persona for this feature?
-2. Are there any specific performance requirements?
-3. What's the expected timeline for completion?
-4. Are there any dependencies on other features or services?
-5. What does "done" look like for this epic?
-
-Please answer any questions you'd like to address, or let me know if you'd like to discuss specific aspects in more detail.`
-
-    case 'review':
-      return `Here's my review of the epic **${epicId}**:
-
-**Strengths:**
-- Clear scope definition
-- Well-structured task breakdown
-- Dependencies are properly mapped
-
-**Areas for Improvement:**
-- Consider adding more acceptance criteria
-- Some tasks might benefit from more detailed descriptions
-- Timeline estimates could be refined
-
-**Recommendations:**
-1. Add unit test requirements to each task
-2. Consider breaking down larger tasks
-3. Ensure all edge cases are covered
-
-Overall, the epic is well-structured and ready for implementation.`
-
-    default:
-      return `I understand you're asking about the epic **${epicId}**.
-
-I can help you with:
-- **/plan** - Generate a detailed implementation plan
-- **/interview** - Ask clarifying questions about requirements
-- **/review** - Review the current plan and provide feedback
-
-What would you like to do?`
-  }
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────

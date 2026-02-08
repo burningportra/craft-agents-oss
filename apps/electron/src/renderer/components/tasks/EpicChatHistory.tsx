@@ -279,9 +279,10 @@ export function useEpicChatHistory(epicId: string | null) {
   )
 
   // Save current state to IndexedDB (for manual save, e.g., after streaming completes)
-  const saveMessages = useCallback(async () => {
+  // Accepts optional parameter to avoid stale closure during streaming
+  const saveMessages = useCallback(async (messagesToSave?: EpicChatMessage[]) => {
     if (!epicId) return
-    await saveChatHistory(epicId, messages)
+    await saveChatHistory(epicId, messagesToSave ?? messages)
   }, [epicId, messages])
 
   // Clear history
