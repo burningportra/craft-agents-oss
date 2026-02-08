@@ -52,7 +52,7 @@ import {
   parseMutationFromResponse,
   type TaskMutation,
 } from './WriteConfirmation'
-import { epicsAtom, tasksAtomFamily, loadTasksAtom } from '@/atoms/tasks-state'
+import { epicsAtom, tasksAtomFamily, loadTasksAtom, registeredFlowProjectsAtom } from '@/atoms/tasks-state'
 import type { ChatCommandType, EpicChatEvent } from '../../../main/lib/epic-chat-agent'
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -337,6 +337,7 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
   const epic = epics.find((e) => e.id === epicId)
   const tasks = useAtomValue(tasksAtomFamily(epicId))
   const loadTasks = useSetAtom(loadTasksAtom)
+  const registeredProjects = useAtomValue(registeredFlowProjectsAtom)
 
   const {
     messages,
@@ -627,9 +628,10 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
       epicId,
       params.commandType,
       params.message,
-      historySlice
+      historySlice,
+      registeredProjects.map((p) => ({ path: p.path, name: p.name }))
     )
-  }, [workspaceRoot, epicId, setMessages])
+  }, [workspaceRoot, epicId, setMessages, registeredProjects])
 
   // Handle send message
   const handleSend = React.useCallback(async () => {
@@ -711,9 +713,10 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
       epicId,
       commandType,
       userMessage,
-      historySlice
+      historySlice,
+      registeredProjects.map((p) => ({ path: p.path, name: p.name }))
     )
-  }, [draft, isProcessing, addMessage, setDraft, epicId, workspaceRoot, saveMessages, setMessages])
+  }, [draft, isProcessing, addMessage, setDraft, epicId, workspaceRoot, saveMessages, setMessages, registeredProjects])
 
   // Handle mutation apply
   const handleApplyMutation = React.useCallback(async (mutation: TaskMutation) => {
@@ -849,11 +852,12 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
           epicId,
           commandType,
           userMessage,
-          historySlice
+          historySlice,
+          registeredProjects.map((p) => ({ path: p.path, name: p.name }))
         )
       })
     })
-  }, [epicId, workspaceRoot, addMessage, setDraft, saveMessages, setMessages])
+  }, [epicId, workspaceRoot, addMessage, setDraft, saveMessages, setMessages, registeredProjects])
 
   if (isLoading) {
     return (

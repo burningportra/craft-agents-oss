@@ -2734,6 +2734,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     commandType: string,
     message: string,
     history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    registeredProjects?: Array<{ path: string; name: string }>,
   ) => {
     const { executeChat } = require('./lib/epic-chat-agent') as typeof import('./lib/epic-chat-agent')
     const window = BrowserWindow.fromWebContents(event.sender)
@@ -2746,6 +2747,7 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
       history: history || [],
       workspaceRoot,
       window,
+      registeredProjects: registeredProjects || [],
     })
   })
 

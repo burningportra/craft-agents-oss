@@ -520,8 +520,8 @@ const api: ElectronAPI = {
     }
   },
   // Epic chat (streaming LLM for /interview, /review, free-form)
-  flowEpicChatSend: (workspaceRoot: string, epicId: string, commandType: string, message: string, history: Array<{ role: string; content: string }>) =>
-    ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPIC_CHAT_SEND, workspaceRoot, epicId, commandType, message, history),
+  flowEpicChatSend: (workspaceRoot: string, epicId: string, commandType: string, message: string, history: Array<{ role: string; content: string }>, registeredProjects?: Array<{ path: string; name: string }>) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPIC_CHAT_SEND, workspaceRoot, epicId, commandType, message, history, registeredProjects),
   onFlowEpicChatStatus: (callback: (event: import('../main/lib/epic-chat-agent').EpicChatEvent & { epicId: string }) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: import('../main/lib/epic-chat-agent').EpicChatEvent & { epicId: string }) => {
       callback(data)

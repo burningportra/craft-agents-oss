@@ -1174,7 +1174,7 @@ export interface ElectronAPI {
   flowEpicPlanApprove(workspaceRoot: string, epicId: string, tasks?: import('../main/lib/planning-agent').PlanTask[]): Promise<{ ok: boolean; error?: string }>
   onFlowEpicPlanStatus(callback: (event: import('../main/lib/planning-agent').PlanProgressEvent & { epicId: string }) => void): () => void
   // Epic chat (streaming LLM)
-  flowEpicChatSend(workspaceRoot: string, epicId: string, commandType: import('../main/lib/epic-chat-agent').ChatCommandType, message: string, history: import('../main/lib/epic-chat-agent').ChatMessage[]): Promise<void>
+  flowEpicChatSend(workspaceRoot: string, epicId: string, commandType: import('../main/lib/epic-chat-agent').ChatCommandType, message: string, history: import('../main/lib/epic-chat-agent').ChatMessage[], registeredProjects?: Array<{ path: string; name: string }>): Promise<void>
   onFlowEpicChatStatus(callback: (event: import('../main/lib/epic-chat-agent').EpicChatEvent & { epicId: string }) => void): () => void
   flowEpicChatAbort(workspaceRoot: string, epicId: string): Promise<boolean>
   onFlowChanged(callback: (workspaceRoot: string, payload: { type: 'epic' | 'task' | 'config'; id?: string }) => void): () => void

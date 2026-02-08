@@ -62,9 +62,8 @@ Replace the minimal empty chat state with a rich, project-aware experience. Show
 - [ ] No LLM call at render time (pure rule-based)
 - [ ] Empty state disappears after first message is sent
 ## Done summary
-TBD
-
+Replaced the static empty chat state with a smart, project-aware empty state featuring dynamic starter prompts. The prompts adapt to epic state (no tasks, has tasks/none done, stuck/blocked tasks, all done, partial progress) and use staggered fade-in animation with AnimatePresence for exit transitions.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 6987e8816f3fbce76ea50dfe61f91df6223090dc
+- Tests: cd apps/electron && bun run typecheck
 - PRs:

@@ -9,8 +9,8 @@
  *                 <- IPC(FLOW_EPIC_CHAT_STATUS) <- streaming text events
  */
 
-import { readFileSync, existsSync } from 'fs'
-import { join } from 'path'
+import { readFileSync, existsSync, readdirSync } from 'fs'
+import { join, basename } from 'path'
 import type { BrowserWindow } from 'electron'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -22,6 +22,11 @@ export interface ChatMessage {
   content: string
 }
 
+export interface RegisteredProject {
+  path: string
+  name: string
+}
+
 export interface EpicChatParams {
   epicId: string
   commandType: ChatCommandType
@@ -29,6 +34,7 @@ export interface EpicChatParams {
   history: ChatMessage[]
   workspaceRoot: string
   window: BrowserWindow
+  registeredProjects?: RegisteredProject[]
 }
 
 export type EpicChatEvent =
@@ -127,6 +133,162 @@ function readProjectLearnings(workspaceRoot: string): string | null {
   }
 }
 
+// ─── Flow Memory Reader ─────────────────────────────────────────────────────
+
+/**
+ * Read all `.flow/memory/*.md` files from a project root.
+ * Returns concatenated content or null if no memory files exist.
+ */
+function readFlowMemory(projectRoot: string): string | null {
+  const memoryDir = join(projectRoot, '.flow', 'memory')
+  try {
+    if (!existsSync(memoryDir)) return null
+
+    const files = readdirSync(memoryDir).filter((f: string) => f.endsWith('.md'))
+    if (files.length === 0) return null
+
+    const entries: string[] = []
+    for (const file of files) {
+      try {
+        const content = readFileSync(join(memoryDir, file), 'utf-8').trim()
+        if (content) {
+          const topic = file.replace(/\.md$/, '')
+          entries.push(`### ${topic}\n${content}`)
+        }
+      } catch {
+        // Skip unreadable files
+      }
+    }
+
+    return entries.length > 0 ? entries.join('\n\n') : null
+  } catch {
+    return null
+  }
+}
+
+// ─── Cross-Project Context Cache ────────────────────────────────────────────
+
+/** Cache entry for cross-project context */
+interface ContextCacheEntry {
+  context: string
+  timestamp: number
+}
+
+/** 30-minute TTL for cross-project context cache */
+const CROSS_PROJECT_CACHE_TTL_MS = 30 * 60 * 1000
+
+/** Cache keyed by workspace root */
+const crossProjectCache = new Map<string, ContextCacheEntry>()
+
+/** Max total chars for cross-project context (~6000 chars = ~2000 tokens) */
+const MAX_CROSS_PROJECT_CHARS = 6000
+
+/** Max chars per individual project entry */
+const MAX_PER_PROJECT_CHARS = 2000
+
+/**
+ * Gather cross-project knowledge context from registered flow projects.
+ *
+ * Reads `learnings.md` and `.flow/memory/*.md` from each registered project
+ * (excluding the current workspace). Results are cached with 30-minute TTL.
+ *
+ * Returns a formatted context block or null if no cross-project knowledge exists.
+ */
+export function gatherCrossProjectContext(
+  currentWorkspaceRoot: string,
+  registeredProjects: RegisteredProject[],
+): string | null {
+  // Check cache
+  const cached = crossProjectCache.get(currentWorkspaceRoot)
+  if (cached && Date.now() - cached.timestamp < CROSS_PROJECT_CACHE_TTL_MS) {
+    return cached.context || null
+  }
+
+  // Filter out current project
+  const otherProjects = registeredProjects.filter(
+    (p) => p.path !== currentWorkspaceRoot,
+  )
+
+  if (otherProjects.length === 0) {
+    crossProjectCache.set(currentWorkspaceRoot, { context: '', timestamp: Date.now() })
+    return null
+  }
+
+  // Collect learnings per project with size info for prioritization
+  const projectEntries: Array<{ name: string; content: string; size: number }> = []
+
+  for (const project of otherProjects) {
+    const parts: string[] = []
+
+    // Read learnings.md
+    try {
+      const learningsPath = join(project.path, 'learnings.md')
+      if (existsSync(learningsPath)) {
+        const learnings = readFileSync(learningsPath, 'utf-8').trim()
+        if (learnings) {
+          parts.push(learnings)
+        }
+      }
+    } catch {
+      // Skip unreadable learnings
+    }
+
+    // Read .flow/memory/*.md
+    const memory = readFlowMemory(project.path)
+    if (memory) {
+      parts.push(memory)
+    }
+
+    if (parts.length > 0) {
+      let content = parts.join('\n\n')
+      // Truncate individual entry if too large
+      if (content.length > MAX_PER_PROJECT_CHARS) {
+        content = content.slice(0, MAX_PER_PROJECT_CHARS) + '\n...(truncated)'
+      }
+      const name = project.name || basename(project.path)
+      projectEntries.push({ name, content, size: content.length })
+    }
+  }
+
+  if (projectEntries.length === 0) {
+    crossProjectCache.set(currentWorkspaceRoot, { context: '', timestamp: Date.now() })
+    return null
+  }
+
+  // Prioritize projects with more learnings (sort descending by size)
+  projectEntries.sort((a, b) => b.size - a.size)
+
+  // Build aggregated context within budget
+  const sections: string[] = []
+  let totalChars = 0
+
+  for (const entry of projectEntries) {
+    const section = `### ${entry.name}\n${entry.content}`
+    if (totalChars + section.length > MAX_CROSS_PROJECT_CHARS) {
+      // Try to fit a truncated version
+      const remaining = MAX_CROSS_PROJECT_CHARS - totalChars
+      if (remaining > 200) {
+        sections.push(`### ${entry.name}\n${entry.content.slice(0, remaining - 50)}\n...(truncated)`)
+      }
+      break
+    }
+    sections.push(section)
+    totalChars += section.length
+  }
+
+  const context = sections.join('\n\n')
+  crossProjectCache.set(currentWorkspaceRoot, { context, timestamp: Date.now() })
+  return context || null
+}
+
+/**
+ * Build the current project's memory context from `.flow/memory/` files.
+ * Separate from learnings.md — this captures topic-specific memory files.
+ */
+function gatherCurrentProjectMemory(workspaceRoot: string): string | null {
+  return readFlowMemory(workspaceRoot)
+}
+
 // ─── System Prompt Builder ───────────────────────────────────────────────────
 
 interface BuildSystemPromptParams {
@@ -140,8 +302,8 @@ interface BuildSystemPromptParams {
 /**
  * Build a system prompt for the epic chat agent.
  *
- * The `extraContext` parameter is an extension point for injecting
- * cross-project knowledge. Task 4 will provide this.
+ * The `extraContext` parameter injects cross-project knowledge and
+ * current project memory (`.flow/memory/` files) into the prompt.
  */
 export function buildSystemPrompt(params: BuildSystemPromptParams): string {
   const { commandType, epicSpec, taskContext, projectMetadata, extraContext } = params
@@ -159,7 +321,7 @@ ${epicSpec || 'No epic specification available.'}
 ${taskContext}
 `
 
-  // Task 4: Cross-project context injected here
+  // Cross-project knowledge + current project memory
   if (extraContext) {
     prompt += `\n## Cross-Project Context\n${extraContext}\n`
   }
@@ -216,7 +378,7 @@ Be concise and practical. Reference the epic spec and task list when relevant.`
  * cancellation via AbortController. Returns when streaming is complete.
  */
 export async function executeChat(params: EpicChatParams): Promise<void> {
-  const { epicId, commandType, message, history, workspaceRoot, window } = params
+  const { epicId, commandType, message, history, workspaceRoot, window, registeredProjects } = params
   const streamKey = getStreamKey(workspaceRoot, epicId)
 
   // Abort any existing stream for this workspace+epic
@@ -242,12 +404,34 @@ export async function executeChat(params: EpicChatParams): Promise<void> {
     const projectName = readProjectName(workspaceRoot)
     const learnings = readProjectLearnings(workspaceRoot)
 
+    // Gather cross-project context and current project memory
+    const crossProjectContext = registeredProjects && registeredProjects.length > 0
+      ? gatherCrossProjectContext(workspaceRoot, registeredProjects)
+      : null
+    const currentProjectMemory = gatherCurrentProjectMemory(workspaceRoot)
+
+    // Build extra context block combining cross-project knowledge + current memory
+    const extraParts: string[] = []
+
+    if (currentProjectMemory) {
+      extraParts.push(`### Current Project Memory\n${currentProjectMemory}`)
+    }
+
+    if (crossProjectContext) {
+      extraParts.push(
+        `### Patterns from other projects\nThese learnings come from other projects in this workspace. Suggest relevant improvements where applicable:\n\n${crossProjectContext}`,
+      )
+    }
+
+    const extraContext = extraParts.length > 0 ? extraParts.join('\n\n') : undefined
+
     // Build system prompt
     let systemPrompt = buildSystemPrompt({
       commandType,
       epicSpec,
       taskContext,
       projectMetadata: { name: projectName },
+      extraContext,
     })
 
     // Add project learnings if available
