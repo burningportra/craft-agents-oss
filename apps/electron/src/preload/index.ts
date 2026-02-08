@@ -505,6 +505,20 @@ const api: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPIC_SET_PLAN, workspaceRoot, epicId, content),
   flowEpicDelete: (workspaceRoot: string, epicId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPIC_DELETE, workspaceRoot, epicId),
+  // PRD-002: /plan command
+  flowEpicPlan: (workspaceRoot: string, epicId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPIC_PLAN, workspaceRoot, epicId),
+  flowEpicPlanApprove: (workspaceRoot: string, epicId: string, tasks?: unknown[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPIC_PLAN_APPROVE, workspaceRoot, epicId, tasks),
+  onFlowEpicPlanStatus: (callback: (event: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: unknown) => {
+      callback(data as never)
+    }
+    ipcRenderer.on(IPC_CHANNELS.FLOW_EPIC_PLAN_STATUS, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.FLOW_EPIC_PLAN_STATUS, handler)
+    }
+  },
   onFlowChanged: (callback: (workspaceRoot: string, payload: { type: 'epic' | 'task' | 'config'; id?: string }) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, workspaceRoot: string, payload: { type: 'epic' | 'task' | 'config'; id?: string }) => {
       callback(workspaceRoot, payload)

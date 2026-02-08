@@ -206,9 +206,10 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
 
       const fullPrompt = `${systemPrompt}\n\nContext:\n${epicContext}${taskContext}\n\nUser message: ${args || trimmed}`
 
-      // Simulate AI response (in production, this would call the actual AI service)
-      // For now, we'll add a placeholder response
-      const response = await simulateAIResponse(command, epicId, fullPrompt)
+      // PRD-002: /plan uses real planning agent; others still simulated
+      const response = command === 'plan'
+        ? await executePlanCommand(epicId, workspaceRoot)
+        : await simulateAIResponse(command, epicId, fullPrompt)
 
       // Add assistant message
       await addMessage({ role: 'assistant', content: response })
@@ -435,6 +436,51 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
  * Simulate AI response for demo purposes.
  * In production, this would call the actual AI service via IPC.
  */
+/**
+ * Execute the /plan command via IPC to the planning agent.
+ * Returns a formatted markdown response with the task breakdown.
+ */
+async function executePlanCommand(
+  epicId: string,
+  workspaceRoot: string,
+): Promise<string> {
+  const result = await window.electronAPI.flowEpicPlan(workspaceRoot, epicId)
+
+  if (!result.ok || !result.data) {
+    return `Failed to generate plan: ${result.error || 'Unknown error'}\n\nPlease try again.`
+  }
+
+  const { tasks, reasoning, estimatedTotal } = result.data
+
+  // Format tasks as readable markdown
+  const taskLines = tasks.map((task, i) => {
+    const deps = task.dependsOn.length > 0
+      ? ` _(depends on: ${task.dependsOn.map(d => `Task ${d}`).join(', ')})_`
+      : ''
+    const files = task.fileTargets.length > 0
+      ? `\n   Files: \`${task.fileTargets.join('`, `')}\``
+      : ''
+    return `${i + 1}. **${task.title}** [${task.complexity}]${deps}\n   ${task.description}${files}`
+  }).join('\n\n')
+
+  return `## Plan for ${epicId}
+
+${reasoning}
+
+**Estimated total: ${estimatedTotal}**
+
+### Tasks
+
+${taskLines}
+
+---
+**${tasks.length} tasks generated.** Click **Approve Plan** to create these as flowctl tasks, or edit the plan and re-run \`/plan\`.`
+}
+
+/**
+ * Simulate AI response for non-plan commands (interview, review).
+ * TODO: Wire these to real agent calls in future PRDs.
+ */
 async function simulateAIResponse(
   command: SlashCommand,
   epicId: string,
@@ -444,26 +490,6 @@ async function simulateAIResponse(
   await new Promise((resolve) => setTimeout(resolve, 1000 + Math.random() * 1000))
 
   switch (command) {
-    case 'plan':
-      return `I'll help you plan the epic **${epicId}**.
-
-Based on the context, here's a suggested implementation plan:
-
-1. **Foundation Setup**
-   - Set up the basic infrastructure
-   - Configure necessary dependencies
-
-2. **Core Implementation**
-   - Implement the main features
-   - Add error handling
-
-3. **Testing & Polish**
-   - Write unit tests
-   - Add integration tests
-   - Polish the UI
-
-Would you like me to break any of these down into specific tasks?`
-
     case 'interview':
       return `I have a few questions to better understand the requirements for **${epicId}**:
 

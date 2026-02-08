@@ -778,6 +778,10 @@ export const IPC_CHANNELS = {
   // Flow notifications
   FLOW_NOTIFICATION_NAVIGATE: 'flow:notification-navigate',
   FLOW_SHOW_NOTIFICATION: 'flow:show-notification',
+  // PRD-002: /plan command
+  FLOW_EPIC_PLAN: 'flow:epic-plan',
+  FLOW_EPIC_PLAN_STATUS: 'flow:epic-plan-status',
+  FLOW_EPIC_PLAN_APPROVE: 'flow:epic-plan-approve',
 
   // Flow project management (workspace-aware tasks)
   FLOW_PROJECT_REGISTER: 'flow:project-register',
@@ -1161,6 +1165,10 @@ export interface ElectronAPI {
   flowEpicCreate(workspaceRoot: string, title: string, branch?: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').EpicCreateResponse>>
   flowEpicSetPlan(workspaceRoot: string, epicId: string, content: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').EpicSetPlanResponse>>
   flowEpicDelete(workspaceRoot: string, epicId: string): Promise<import('./flow-schemas').FlowBridgeResult<import('./flow-schemas').CommandSuccess>>
+  // PRD-002: /plan command
+  flowEpicPlan(workspaceRoot: string, epicId: string): Promise<{ ok: boolean; data?: import('../main/lib/planning-agent').PlanResult; error?: string }>
+  flowEpicPlanApprove(workspaceRoot: string, epicId: string, tasks?: import('../main/lib/planning-agent').PlanTask[]): Promise<{ ok: boolean; error?: string }>
+  onFlowEpicPlanStatus(callback: (event: import('../main/lib/planning-agent').PlanProgressEvent & { epicId: string }) => void): () => void
   onFlowChanged(callback: (workspaceRoot: string, payload: { type: 'epic' | 'task' | 'config'; id?: string }) => void): () => void
 
   // Flow notifications

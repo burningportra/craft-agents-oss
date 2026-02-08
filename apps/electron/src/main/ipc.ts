@@ -2683,6 +2683,48 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     return getFlowBridge(workspaceRoot).deleteEpic(epicId)
   })
 
+  // ─── PRD-002: /plan Command Execution ──────────────────────────────────────
+
+  // Cache for in-flight plan results (keyed by epicId)
+  const pendingPlans = new Map<string, import('./lib/planning-agent').PlanResult>()
+
+  ipcMain.handle(IPC_CHANNELS.FLOW_EPIC_PLAN, async (event, workspaceRoot: string, epicId: string) => {
+    const { executePlan } = require('./lib/planning-agent') as typeof import('./lib/planning-agent')
+    const bridge = getFlowBridge(workspaceRoot)
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (!window) return { ok: false, error: 'No window found' }
+
+    try {
+      const result = await executePlan(workspaceRoot, epicId, window, bridge)
+      pendingPlans.set(epicId, result)
+      return { ok: true, data: result }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Planning failed' }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.FLOW_EPIC_PLAN_APPROVE, async (event, workspaceRoot: string, epicId: string, tasks?: import('./lib/planning-agent').PlanTask[]) => {
+    const { applyPlan } = require('./lib/planning-agent') as typeof import('./lib/planning-agent')
+    const bridge = getFlowBridge(workspaceRoot)
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (!window) return { ok: false, error: 'No window found' }
+
+    // Use provided tasks (user may have edited) or fall back to cached plan
+    const planResult = pendingPlans.get(epicId)
+    const tasksToApply = tasks || planResult?.tasks
+    if (!tasksToApply || tasksToApply.length === 0) {
+      return { ok: false, error: 'No plan tasks found. Run /plan first.' }
+    }
+
+    try {
+      await applyPlan(workspaceRoot, epicId, tasksToApply, bridge, window)
+      pendingPlans.delete(epicId)
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Failed to apply plan' }
+    }
+  })
+
   // Flow notifications
   ipcMain.handle(IPC_CHANNELS.FLOW_SHOW_NOTIFICATION, (_event, params: {
     type: string
