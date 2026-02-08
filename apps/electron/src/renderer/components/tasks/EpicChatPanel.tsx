@@ -32,6 +32,7 @@ import {
   Square,
   ChevronDown,
   AlertCircle,
+  Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -83,6 +84,139 @@ const springTransition = {
   type: 'spring' as const,
   stiffness: 600,
   damping: 49,
+}
+
+// ─── Starter Prompts ─────────────────────────────────────────────────────────
+
+interface StarterPrompt {
+  label: string
+  /** If set, use handleInsertCommand to populate input (slash command). Otherwise send immediately. */
+  command?: string
+  /** Free-form message to send immediately on click (used when command is not set) */
+  message?: string
+}
+
+/**
+ * Generate dynamic starter prompts based on epic state.
+ * Pure rule-based — no LLM calls.
+ */
+function getStarterPrompts(
+  tasks: Array<{ status: string; title: string }>,
+): StarterPrompt[] {
+  const totalTasks = tasks.length
+  const doneTasks = tasks.filter((t) => t.status === 'done').length
+  const inProgressTasks = tasks.filter((t) => t.status === 'in_progress')
+  const blockedTasks = tasks.filter((t) => t.status === 'blocked')
+  const stuckTasks = [...inProgressTasks, ...blockedTasks]
+
+  // No tasks — suggest planning & interview
+  if (totalTasks === 0) {
+    return [
+      { label: 'Break down this epic into tasks', command: '/plan' },
+      { label: 'What questions should I answer first?', command: '/interview' },
+    ]
+  }
+
+  // All tasks done — suggest retrospective
+  if (totalTasks > 0 && doneTasks === totalTasks) {
+    return [
+      { label: 'What could we improve?', message: 'What could we improve about this epic?' },
+      { label: 'Generate a retrospective', message: 'Generate a retrospective for this epic' },
+    ]
+  }
+
+  // Has stuck/blocked tasks — suggest help
+  if (stuckTasks.length > 0) {
+    const stuckTask = stuckTasks[0]
+    return [
+      {
+        label: `Help me get unstuck on "${stuckTask.title.length > 30 ? stuckTask.title.slice(0, 30) + '...' : stuckTask.title}"`,
+        message: `Help me get unstuck on the task "${stuckTask.title}"`,
+      },
+      { label: "What's blocking progress?", message: "What's blocking progress on this epic?" },
+    ]
+  }
+
+  // Has tasks but none done — suggest review & guidance
+  if (doneTasks === 0) {
+    return [
+      { label: 'Review the task breakdown', command: '/review' },
+      { label: 'What should I tackle first?', message: 'What task should I tackle first and why?' },
+    ]
+  }
+
+  // Partial progress — suggest review & next steps
+  return [
+    { label: 'Review current progress', command: '/review' },
+    { label: 'What should I work on next?', message: 'Based on the current task status, what should I work on next?' },
+  ]
+}
+
+// ─── Smart Empty State ───────────────────────────────────────────────────────
+
+interface SmartEmptyStateProps {
+  epicTitle: string
+  tasks: Array<{ status: string; title: string }>
+  onInsertCommand: (command: string) => void
+  onSendMessage: (message: string) => void
+}
+
+function SmartEmptyState({ epicTitle, tasks, onInsertCommand, onSendMessage }: SmartEmptyStateProps) {
+  const starters = getStarterPrompts(tasks)
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="flex flex-col items-center py-8 px-2"
+    >
+      <motion.div
+        initial={{ scale: 0.8, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.3 }}
+      >
+        <Sparkles className="h-8 w-8 mx-auto mb-3 text-blue-500/60" />
+      </motion.div>
+      <p className="text-sm text-foreground/80 text-center mb-1">
+        What would you like to know about
+      </p>
+      <p className="text-sm font-medium text-foreground text-center mb-4 px-2 leading-snug">
+        {epicTitle}?
+      </p>
+      <div className="flex flex-wrap justify-center gap-1.5 px-1">
+        {starters.map((starter, index) => (
+          <motion.button
+            key={starter.label}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, delay: index * 0.05 }}
+            onClick={() => {
+              if (starter.command) {
+                onInsertCommand(starter.command)
+              } else if (starter.message) {
+                onSendMessage(starter.message)
+              }
+            }}
+            className={cn(
+              'px-3 py-1.5 rounded-full text-xs',
+              'bg-foreground/5 hover:bg-foreground/10',
+              'text-foreground/70 hover:text-foreground',
+              'border border-border/40 hover:border-border/60',
+              'transition-colors duration-150 cursor-pointer',
+              'max-w-[250px] text-center leading-snug'
+            )}
+          >
+            {starter.label}
+          </motion.button>
+        ))}
+      </div>
+      <p className="text-[10px] text-muted-foreground/50 mt-4">
+        or type a question below
+      </p>
+    </motion.div>
+  )
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -644,6 +778,83 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
     }
   }, [clearHistory])
 
+  // Handle send from starter prompt (free-form — set draft and immediately fire send)
+  const handleSendMessage = React.useCallback((message: string) => {
+    setDraft(message)
+    // Use requestAnimationFrame so the draft state update is flushed before handleSend reads it
+    requestAnimationFrame(() => {
+      // We can't call handleSend because it reads `draft` from the closure.
+      // Instead, directly add user message and fire IPC.
+      const trimmed = message.trim()
+      if (!trimmed || isProcessingRef.current) return
+
+      const { command, args } = parseSlashCommand(trimmed)
+
+      // Use the same logic as handleSend but with the explicit message
+      addMessage({ role: 'user', content: trimmed }).then(() => {
+        setDraft('')
+
+        if (command === 'plan') {
+          setIsProcessing(true)
+          executePlanCommand(epicId, workspaceRoot)
+            .then(async (response) => {
+              await addMessage({ role: 'assistant', content: response })
+              if (!response.startsWith('Failed to generate plan')) {
+                setHasPendingPlan(true)
+              }
+              const mutation = parseMutationFromResponse(response)
+              if (mutation) setPendingMutation(mutation)
+              await saveMessages()
+            })
+            .catch(async () => {
+              await addMessage({
+                role: 'assistant',
+                content: 'Sorry, I encountered an error processing your request. Please try again.',
+              })
+            })
+            .finally(() => setIsProcessing(false))
+          return
+        }
+
+        setIsProcessing(true)
+        setIsStreaming(true)
+        streamContentRef.current = ''
+
+        const commandType: ChatCommandType = command === 'interview'
+          ? 'interview'
+          : command === 'review'
+            ? 'review'
+            : 'chat'
+
+        const userMessage = args || trimmed
+
+        const placeholderMessage: EpicChatMessage = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: '',
+          timestamp: Date.now(),
+        }
+        setMessages((prev) => [...prev, placeholderMessage])
+
+        const currentMessages = messagesRef.current
+        const historySlice = currentMessages
+          .filter((m) => m.content !== '' && !m.id.startsWith('error-'))
+          .slice(-MAX_HISTORY_MESSAGES)
+          .map((m) => ({ role: m.role, content: m.content }))
+
+        lastSendParamsRef.current = { message: userMessage, commandType, history: historySlice }
+
+        window.electronAPI.flowEpicChatSend(
+          workspaceRoot,
+          epicId,
+          commandType,
+          userMessage,
+          historySlice
+        )
+      })
+    })
+  }, [epicId, workspaceRoot, addMessage, setDraft, saveMessages, setMessages])
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -696,14 +907,15 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
       <div className="relative flex-1 overflow-hidden">
         <ScrollArea className="h-full" viewportRef={scrollRef as React.RefObject<HTMLDivElement>}>
           <div className="p-3 space-y-3">
+            <AnimatePresence mode="wait">
             {messages.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                <p className="text-sm">Start a conversation about this epic</p>
-                <p className="text-xs mt-1">
-                  Use /plan, /interview, or /review commands
-                </p>
-              </div>
+              <SmartEmptyState
+                key="empty-state"
+                epicTitle={epic?.title || epicId}
+                tasks={tasks}
+                onInsertCommand={handleInsertCommand}
+                onSendMessage={handleSendMessage}
+              />
             ) : (
               messages.map((message, index) => {
                 const isLastMessage = index === messages.length - 1
@@ -728,6 +940,7 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
                 )
               })
             )}
+            </AnimatePresence>
 
             {/* Processing indicator (shown when waiting for first token) */}
             {isProcessing && !isStreaming && (

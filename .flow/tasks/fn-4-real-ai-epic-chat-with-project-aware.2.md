@@ -74,9 +74,8 @@ Replace `simulateAIResponse()` in `EpicChatPanel.tsx` with real IPC calls to the
 - [ ] No attachment buttons rendered in epic chat input
 - [ ] TypeScript compiles with no errors
 ## Done summary
-TBD
-
+Replaced simulateAIResponse() with real IPC streaming to epic-chat-agent for /interview, /review, and free-form chat. Added stop button, error bubbles with retry, auto-scroll with threshold detection, scroll-to-bottom indicator, epic-switch abort, stale closure fix in saveMessages, and StreamingMarkdown rendering.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 91998d5c31e7f20b254ad87a5221180940f8d784
+- Tests: cd apps/electron && bun run typecheck
 - PRs:
