@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { atomWithStorage } from 'jotai/utils'
 import { atomFamily } from 'jotai-family'
-import { MessageCircle, Send, Trash2, Bot, User, X } from 'lucide-react'
+import { MessageCircle, Send, Trash2, Bot, User, X, CheckCircle2, RotateCcw, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -154,8 +154,79 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
   const [pendingMutation, setPendingMutation] = React.useState<TaskMutation | null>(null)
   const [isApplyingMutation, setIsApplyingMutation] = React.useState(false)
 
+  // PRD-002: Plan approval state
+  const [hasPendingPlan, setHasPendingPlan] = React.useState(false)
+  const [isApprovingPlan, setIsApprovingPlan] = React.useState(false)
+  const [planProgress, setPlanProgress] = React.useState<string | null>(null)
+
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
   const scrollRef = React.useRef<HTMLDivElement>(null)
+
+  // PRD-002: Listen for plan progress events
+  React.useEffect(() => {
+    const unsubscribe = window.electronAPI.onFlowEpicPlanStatus((event) => {
+      if (event.epicId !== epicId) return
+
+      switch (event.type) {
+        case 'progress':
+          setPlanProgress(event.message || 'Planning...')
+          break
+        case 'tasks':
+          setPlanProgress(null)
+          setHasPendingPlan(true)
+          break
+        case 'error':
+          setPlanProgress(null)
+          break
+        case 'complete':
+          setPlanProgress(null)
+          setHasPendingPlan(false)
+          // Reload tasks to show newly created tasks
+          loadTasks(workspaceRoot, epicId)
+          break
+      }
+    })
+    return unsubscribe
+  }, [epicId, workspaceRoot, loadTasks])
+
+  // PRD-002: Handle plan approval
+  const handleApprovePlan = React.useCallback(async () => {
+    setIsApprovingPlan(true)
+    try {
+      const result = await window.electronAPI.flowEpicPlanApprove(workspaceRoot, epicId)
+      if (result.ok) {
+        setHasPendingPlan(false)
+        await addMessage({
+          role: 'assistant',
+          content: '✅ Plan approved! Tasks have been created. Check the task board.',
+        })
+        await saveMessages()
+        // Reload tasks to show newly created tasks
+        await loadTasks(workspaceRoot, epicId)
+      } else {
+        await addMessage({
+          role: 'assistant',
+          content: `Failed to approve plan: ${result.error}`,
+        })
+        await saveMessages()
+      }
+    } catch (error) {
+      console.error('[EpicChatPanel] Error approving plan:', error)
+      await addMessage({
+        role: 'assistant',
+        content: 'Failed to approve plan. Please try again.',
+      })
+    } finally {
+      setIsApprovingPlan(false)
+    }
+  }, [workspaceRoot, epicId, addMessage, saveMessages, loadTasks])
+
+  // PRD-002: Handle re-plan
+  const handleReplan = React.useCallback(() => {
+    setHasPendingPlan(false)
+    setDraft('/plan ')
+    textareaRef.current?.focus()
+  }, [setDraft])
 
   // Auto-scroll to bottom when new messages arrive
   React.useEffect(() => {
@@ -213,6 +284,11 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
 
       // Add assistant message
       await addMessage({ role: 'assistant', content: response })
+
+      // PRD-002: Show approval bar after successful /plan
+      if (command === 'plan' && !response.startsWith('Failed to generate plan')) {
+        setHasPendingPlan(true)
+      }
 
       // Check for mutations in the response
       const mutation = parseMutationFromResponse(response)
@@ -395,6 +471,70 @@ function ChatContent({ epicId, workspaceRoot, onClose }: ChatContentProps) {
               onApply={handleApplyMutation}
               onDismiss={handleDismissMutation}
             />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* PRD-002: Plan approval bar */}
+      <AnimatePresence>
+        {hasPendingPlan && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="px-3 pb-2"
+          >
+            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-success/5 border border-success/20">
+              <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
+              <span className="text-xs text-foreground flex-1">
+                Plan ready for approval
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={handleReplan}
+                disabled={isApprovingPlan}
+              >
+                <RotateCcw className="h-3 w-3 mr-1" />
+                Re-plan
+              </Button>
+              <Button
+                size="sm"
+                className="h-7 px-3 text-xs bg-success/10 text-success hover:bg-success/20 border border-success/30"
+                onClick={handleApprovePlan}
+                disabled={isApprovingPlan}
+              >
+                {isApprovingPlan ? (
+                  <>
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                    Creating tasks...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Approve Plan
+                  </>
+                )}
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* PRD-002: Plan progress indicator */}
+      <AnimatePresence>
+        {planProgress && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="px-3 pb-2"
+          >
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-blue-500/5 border border-blue-500/20">
+              <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin shrink-0" />
+              <span className="text-xs text-muted-foreground">{planProgress}</span>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
