@@ -67,9 +67,8 @@ Enhance the epic chat agent's `buildSystemPrompt()` with cross-project knowledge
 - [ ] `buildSystemPrompt()` receives cross-project context via `extraContext` parameter
 - [ ] TypeScript compiles with no errors
 ## Done summary
-TBD
-
+Added cross-project knowledge context to the epic chat agent. The system prompt now includes learnings and memory files from the current project's `.flow/memory/` directory, plus aggregated learnings from all other registered flow projects (capped at 6000 chars, cached with 30-minute TTL). Registered projects are passed from the renderer through IPC to the main process.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 032202a9f7de2684dab703d712a31e1794383b33
+- Tests: cd apps/electron && bun run typecheck
 - PRs:
