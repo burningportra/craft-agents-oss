@@ -782,6 +782,10 @@ export const IPC_CHANNELS = {
   FLOW_EPIC_PLAN: 'flow:epic-plan',
   FLOW_EPIC_PLAN_STATUS: 'flow:epic-plan-status',
   FLOW_EPIC_PLAN_APPROVE: 'flow:epic-plan-approve',
+  // Epic chat (streaming LLM for /interview, /review, free-form chat)
+  FLOW_EPIC_CHAT_SEND: 'flow:epic-chat-send',
+  FLOW_EPIC_CHAT_STATUS: 'flow:epic-chat-status',
+  FLOW_EPIC_CHAT_ABORT: 'flow:epic-chat-abort',
 
   // Flow project management (workspace-aware tasks)
   FLOW_PROJECT_REGISTER: 'flow:project-register',
@@ -1169,6 +1173,10 @@ export interface ElectronAPI {
   flowEpicPlan(workspaceRoot: string, epicId: string): Promise<{ ok: boolean; data?: import('../main/lib/planning-agent').PlanResult; error?: string }>
   flowEpicPlanApprove(workspaceRoot: string, epicId: string, tasks?: import('../main/lib/planning-agent').PlanTask[]): Promise<{ ok: boolean; error?: string }>
   onFlowEpicPlanStatus(callback: (event: import('../main/lib/planning-agent').PlanProgressEvent & { epicId: string }) => void): () => void
+  // Epic chat (streaming LLM)
+  flowEpicChatSend(workspaceRoot: string, epicId: string, commandType: import('../main/lib/epic-chat-agent').ChatCommandType, message: string, history: import('../main/lib/epic-chat-agent').ChatMessage[]): Promise<void>
+  onFlowEpicChatStatus(callback: (event: import('../main/lib/epic-chat-agent').EpicChatEvent & { epicId: string }) => void): () => void
+  flowEpicChatAbort(workspaceRoot: string, epicId: string): Promise<boolean>
   onFlowChanged(callback: (workspaceRoot: string, payload: { type: 'epic' | 'task' | 'config'; id?: string }) => void): () => void
 
   // Flow notifications

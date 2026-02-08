@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-02-08T03:17:48.153403Z",
+  "depends_on": [
+    "fn-4-real-ai-epic-chat-with-project-aware.1"
+  ],
+  "epic": "fn-4-real-ai-epic-chat-with-project-aware",
+  "id": "fn-4-real-ai-epic-chat-with-project-aware.2",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-4-real-ai-epic-chat-with-project-aware.2.md",
+  "status": "todo",
+  "title": "Wire Chat UI to Streaming Agent",
+  "updated_at": "2026-02-08T03:27:34.709274Z"
+}

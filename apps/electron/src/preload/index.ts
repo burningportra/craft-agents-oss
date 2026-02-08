@@ -519,6 +519,20 @@ const api: ElectronAPI = {
       ipcRenderer.removeListener(IPC_CHANNELS.FLOW_EPIC_PLAN_STATUS, handler)
     }
   },
+  // Epic chat (streaming LLM for /interview, /review, free-form)
+  flowEpicChatSend: (workspaceRoot: string, epicId: string, commandType: string, message: string, history: Array<{ role: string; content: string }>) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPIC_CHAT_SEND, workspaceRoot, epicId, commandType, message, history),
+  onFlowEpicChatStatus: (callback: (event: import('../main/lib/epic-chat-agent').EpicChatEvent & { epicId: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: import('../main/lib/epic-chat-agent').EpicChatEvent & { epicId: string }) => {
+      callback(data)
+    }
+    ipcRenderer.on(IPC_CHANNELS.FLOW_EPIC_CHAT_STATUS, handler)
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.FLOW_EPIC_CHAT_STATUS, handler)
+    }
+  },
+  flowEpicChatAbort: (workspaceRoot: string, epicId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPIC_CHAT_ABORT, workspaceRoot, epicId),
   onFlowChanged: (callback: (workspaceRoot: string, payload: { type: 'epic' | 'task' | 'config'; id?: string }) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, workspaceRoot: string, payload: { type: 'epic' | 'task' | 'config'; id?: string }) => {
       callback(workspaceRoot, payload)

@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-02-08T03:17:48.277288Z",
+  "depends_on": [
+    "fn-4-real-ai-epic-chat-with-project-aware.2"
+  ],
+  "epic": "fn-4-real-ai-epic-chat-with-project-aware",
+  "id": "fn-4-real-ai-epic-chat-with-project-aware.3",
+  "priority": null,
+  "spec_path": ".flow/tasks/fn-4-real-ai-epic-chat-with-project-aware.3.md",
+  "status": "todo",
+  "title": "Smart Empty State + Starter Prompts",
+  "updated_at": "2026-02-08T03:27:52.241453Z"
+}

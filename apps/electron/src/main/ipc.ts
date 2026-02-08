@@ -2725,6 +2725,35 @@ export function registerIpcHandlers(sessionManager: SessionManager, windowManage
     }
   })
 
+  // ─── Epic Chat: Streaming LLM for /interview, /review, free-form chat ────
+
+  ipcMain.handle(IPC_CHANNELS.FLOW_EPIC_CHAT_SEND, async (
+    event,
+    workspaceRoot: string,
+    epicId: string,
+    commandType: string,
+    message: string,
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+  ) => {
+    const { executeChat } = require('./lib/epic-chat-agent') as typeof import('./lib/epic-chat-agent')
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (!window) return
+
+    await executeChat({
+      epicId,
+      commandType: commandType as 'interview' | 'review' | 'chat',
+      message,
+      history: history || [],
+      workspaceRoot,
+      window,
+    })
+  })
+
+  ipcMain.handle(IPC_CHANNELS.FLOW_EPIC_CHAT_ABORT, (_event, workspaceRoot: string, epicId: string) => {
+    const { abortChat } = require('./lib/epic-chat-agent') as typeof import('./lib/epic-chat-agent')
+    return abortChat(workspaceRoot, epicId)
+  })
+
   // Flow notifications
   ipcMain.handle(IPC_CHANNELS.FLOW_SHOW_NOTIFICATION, (_event, params: {
     type: string
