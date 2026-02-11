@@ -24,10 +24,11 @@ export type MessageRole =
  * Credential input modes for different auth types
  */
 export type CredentialInputMode =
-  | 'bearer'      // Single token field (Bearer Token, API Key)
-  | 'basic'       // Username + Password fields
-  | 'header'      // API Key with custom header name
-  | 'query';      // API Key for query parameter
+  | 'bearer'       // Single token field (Bearer Token, API Key)
+  | 'basic'        // Username + Password fields
+  | 'header'       // API Key with custom header name
+  | 'query'        // API Key for query parameter
+  | 'multi-header'; // Multiple header fields
 
 /**
  * Auth request types
@@ -207,6 +208,7 @@ export interface Message {
   authStatus?: AuthStatus;
   authCredentialMode?: CredentialInputMode;  // For credential requests
   authHeaderName?: string;        // For header auth - the header name
+  authHeaderNames?: string[];     // For multi-header auth (e.g., ["DD-API-KEY", "DD-APPLICATION-KEY"])
   authLabels?: {                  // Custom field labels
     credential?: string;
     username?: string;
@@ -290,6 +292,7 @@ export interface StoredMessage {
   authStatus?: AuthStatus;
   authCredentialMode?: CredentialInputMode;
   authHeaderName?: string;
+  authHeaderNames?: string[];
   authLabels?: {
     credential?: string;
     username?: string;
@@ -302,6 +305,8 @@ export interface StoredMessage {
   authError?: string;
   authEmail?: string;
   authWorkspace?: string;
+  // Queued: user message that is waiting to be processed (persisted for recovery)
+  isQueued?: boolean;
 }
 
 /**
@@ -337,6 +342,7 @@ export interface RecoveryAction {
 export type ErrorCode =
   | 'invalid_api_key'
   | 'invalid_credentials'
+  | 'response_too_large'
   | 'expired_oauth_token'
   | 'token_expired'
   | 'rate_limited'
@@ -350,6 +356,8 @@ export type ErrorCode =
   | 'invalid_model'          // Model ID not found
   | 'data_policy_error'      // OpenRouter data policy restriction
   | 'invalid_request'        // API rejected the request (e.g., bad image, invalid content)
+  | 'image_too_large'        // Image exceeds API dimension/size limits
+  | 'provider_error'         // AI provider experiencing issues (overloaded, unavailable)
   | 'unknown_error';
 
 /**
@@ -375,14 +383,19 @@ export interface TypedError {
 }
 
 /**
+ * Permission request type categories
+ */
+export type PermissionRequestType = 'bash' | 'file_write' | 'mcp_mutation' | 'api_mutation';
+
+/**
  * Permission request from agent (e.g., bash command approval)
  */
 export interface PermissionRequest {
   requestId: string;
   toolName: string;
-  command: string;
+  command?: string;  // Optional: bash commands have it, MCP tools may not
   description: string;
-  type?: 'bash';  // Type of permission request
+  type?: PermissionRequestType;  // Type of permission request
 }
 
 /**
@@ -420,7 +433,8 @@ export type AgentEvent =
   | { type: 'task_progress'; toolUseId: string; elapsedSeconds: number; turnId?: string }
   | { type: 'shell_killed'; shellId: string; turnId?: string }
   | { type: 'source_activated'; sourceSlug: string; originalMessage: string }
-  | { type: 'usage_update'; usage: Pick<AgentEventUsage, 'inputTokens' | 'contextWindow'> };
+  | { type: 'usage_update'; usage: Pick<AgentEventUsage, 'inputTokens' | 'contextWindow'> }
+  | { type: 'todos_updated'; todos: Array<{ content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }>; turnId?: string; explanation?: string | null };
 
 /**
  * Generate a unique message ID

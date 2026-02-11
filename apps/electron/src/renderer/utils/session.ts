@@ -1,4 +1,4 @@
-import type { Session } from "../../shared/types"
+import type { Session, Message } from "../../shared/types"
 import type { SessionMeta } from "../atoms/sessions"
 
 /** Common session fields used by getSessionTitle */
@@ -51,13 +51,14 @@ export function getSessionTitle(session: SessionLike | SessionMeta): string {
 }
 
 /**
- * Get the ID of the last final assistant message (not intermediate)
+ * Get the ID of the last final assistant or plan message (not intermediate)
  * Used for unread message tracking
  */
 export function getLastFinalAssistantMessageId(session: Session): string | undefined {
   for (let i = session.messages.length - 1; i >= 0; i--) {
     const msg = session.messages[i]
-    if (msg.role === 'assistant' && !msg.isIntermediate) {
+    // Include plan messages as final responses (they're AI-generated content)
+    if ((msg.role === 'assistant' || msg.role === 'plan') && !msg.isIntermediate) {
       return msg.id
     }
   }
@@ -81,23 +82,26 @@ export function hasUnreadMessages(session: Session): boolean {
  * Returns the count of final assistant messages after lastReadMessageId
  */
 export function countUnreadMessages(session: Session): number {
+  // Helper to check if message is a final response (assistant or plan)
+  const isFinalResponse = (msg: Message) =>
+    (msg.role === 'assistant' || msg.role === 'plan') && !msg.isIntermediate
+
   if (!session.lastReadMessageId) {
-    // Never read - count all final assistant messages
-    return session.messages.filter(msg => msg.role === 'assistant' && !msg.isIntermediate).length
+    // Never read - count all final messages
+    return session.messages.filter(isFinalResponse).length
   }
 
   // Find the index of the last read message
   const lastReadIndex = session.messages.findIndex(msg => msg.id === session.lastReadMessageId)
   if (lastReadIndex === -1) {
-    // Last read message not found - count all final assistant messages
-    return session.messages.filter(msg => msg.role === 'assistant' && !msg.isIntermediate).length
+    // Last read message not found - count all final messages
+    return session.messages.filter(isFinalResponse).length
   }
 
-  // Count final assistant messages after the last read index
+  // Count final messages after the last read index
   let count = 0
   for (let i = lastReadIndex + 1; i < session.messages.length; i++) {
-    const msg = session.messages[i]
-    if (msg.role === 'assistant' && !msg.isIntermediate) {
+    if (isFinalResponse(session.messages[i])) {
       count++
     }
   }

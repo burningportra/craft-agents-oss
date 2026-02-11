@@ -10,7 +10,6 @@ import {
   ExternalLink,
   Info,
   PenLine,
-  RefreshCw,
   X,
 } from "lucide-react"
 import { motion, AnimatePresence } from "motion/react"
@@ -43,13 +42,8 @@ import { useTheme } from "@/hooks/useTheme"
 import type { Session, Message, FileAttachment, StoredAttachment, PermissionRequest, CredentialRequest, CredentialResponse, LoadedSource, LoadedSkill } from "../../../shared/types"
 import type { PermissionMode } from "@craft-agent/shared/agent/modes"
 import type { ThinkingLevel } from "@craft-agent/shared/agent/thinking-levels"
-import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type AuthRequestTurn, type IntentPickerTurn, type HandoffReviewTurn, type ExtractionProgressTurn, type PhaseIndicatorTurn } from "@craft-agent/ui"
+import { TurnCard, UserMessageBubble, groupMessagesByTurn, formatTurnAsMarkdown, formatActivityAsMarkdown, type Turn, type AssistantTurn, type UserTurn, type SystemTurn, type AuthRequestTurn } from "@craft-agent/ui"
 import { MemoizedAuthRequestCard } from "@/components/chat/AuthRequestCard"
-import { MemoizedIntentPickerCard } from "@/components/chat/IntentPickerCard"
-import { WelcomeIntentPicker } from "@/components/chat/WelcomeIntentPicker"
-import { MemoizedHandoffReviewCard } from "@/components/chat/HandoffReviewCard"
-import { MemoizedExtractionCard } from "@/components/chat/ExtractionCard"
-import { MemoizedPhaseIndicator } from "@/components/chat/PhaseIndicator"
 import { ActiveOptionBadges } from "./ActiveOptionBadges"
 import { InputContainer, type StructuredInputState, type StructuredResponse, type PermissionResponse } from "./input"
 import type { RichTextInputHandle } from "@/components/ui/rich-text-input"
@@ -104,7 +98,10 @@ interface ChatDisplayProps {
   onOpenUrl: (url: string) => void
   // Model selection
   currentModel: string
-  onModelChange: (model: string) => void
+  onModelChange: (model: string, connection?: string) => void
+  // Connection selection (locked after first message)
+  /** Callback when LLM connection changes (only works when session is empty) */
+  onConnectionChange?: (connectionSlug: string) => void
   /** Ref for the input, used for external focus control */
   textareaRef?: React.RefObject<RichTextInputHandle>
   /** When true, disables input (e.g., when agent needs activation) */
@@ -185,6 +182,8 @@ interface ChatDisplayProps {
   placeholder?: string | string[]
   /** Label shown as empty state in compact mode (e.g., "Permission Settings") */
   emptyStateLabel?: string
+  /** When true, the session's locked connection has been removed - disables send and shows unavailable state */
+  connectionUnavailable?: boolean
 }
 
 /**
@@ -379,6 +378,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   onOpenUrl,
   currentModel,
   onModelChange,
+  onConnectionChange,
   textareaRef: externalTextareaRef,
   disabled = false,
   pendingPermission,
@@ -426,6 +426,8 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   compactMode = false,
   placeholder,
   emptyStateLabel,
+  // Connection unavailable
+  connectionUnavailable = false,
 }, ref) {
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send
@@ -1012,19 +1014,38 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
 
   // Helper to collect Edit/Write activities into FileChange array
   // Used by both onOpenActivityDetails and onOpenMultiFileDiff
+  // Supports both Claude Code format (file_path, old_string, new_string) and
+  // Codex format (changes array with path and diff fields)
   const collectFileChanges = useCallback((activities: ActivityItem[]): FileChange[] => {
     const changes: FileChange[] = []
     for (const a of activities) {
       const input = a.toolInput as Record<string, unknown> | undefined
       if (a.toolName === 'Edit' && input) {
-        changes.push({
-          id: a.id,
-          filePath: (input.file_path as string) || 'unknown',
-          toolType: 'Edit',
-          original: (input.old_string as string) || '',
-          modified: (input.new_string as string) || '',
-          error: a.error || undefined,
-        })
+        // Check for Codex format: { changes: Array<{ path, kind, diff }> }
+        if (input.changes && Array.isArray(input.changes)) {
+          // Codex fileChange format - extract each change
+          for (const codexChange of input.changes as Array<{ path?: string; kind?: unknown; diff?: string }>) {
+            changes.push({
+              id: `${a.id}-${codexChange.path || 'unknown'}`,
+              filePath: codexChange.path || 'unknown',
+              toolType: 'Edit',
+              original: '',
+              modified: '',
+              unifiedDiff: codexChange.diff,
+              error: a.error || undefined,
+            })
+          }
+        } else {
+          // Claude Code format: { file_path, old_string, new_string }
+          changes.push({
+            id: a.id,
+            filePath: (input.file_path as string) || 'unknown',
+            toolType: 'Edit',
+            original: (input.old_string as string) || '',
+            modified: (input.new_string as string) || '',
+            error: a.error || undefined,
+          })
+        }
       } else if (a.toolName === 'Write' && input) {
         changes.push({
           id: a.id,
@@ -1275,10 +1296,6 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                       <span className="text-xs text-muted-foreground/50">Just describe it — I'll handle the rest</span>
                     </div>
                   )}
-                  {/* Welcome intent picker for normal mode empty sessions */}
-                  {!compactMode && turns.length === 0 && (
-                    <WelcomeIntentPicker onSelectIntent={(message) => onSendMessage(message)} />
-                  )}
                   {/* Load more indicator - shown when there are older messages */}
                   {hasMoreAbove && (
                     <div className="text-center text-muted-foreground/60 text-xs py-3 select-none">
@@ -1291,11 +1308,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                       if (turn.type === 'user') return `user-${turn.message.id}`
                       if (turn.type === 'system') return `system-${turn.message.id}`
                       if (turn.type === 'auth-request') return `auth-${turn.message.id}`
-                      if (turn.type === 'intent-picker') return `intent-${turn.message.id}`
-                      if (turn.type === 'handoff-review') return `handoff-${turn.message.id}`
-                      if (turn.type === 'extraction-progress') return `extraction-${turn.message.id}`
-                      if (turn.type === 'phase-indicator') return `phase-${turn.message.id}`
-                      return `turn-${turn.turnId}`
+                      return `turn-${turn.turnId}-${turn.timestamp}`
                     }
                     const turnKey = getTurnKey()
                     const isCurrentMatch = isSearchActive && matchingTurnIds[currentMatchIndex] === turnKey
@@ -1371,82 +1384,6 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                       )
                     }
 
-                    // Intent-picker turns - render inline intent selection UI
-                    if (turn.type === 'intent-picker') {
-                      const isInteractive = !turns.slice(index + 1).some(t => t.type === 'user')
-                      return (
-                        <div
-                          key={turnKey}
-                          ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
-                          className={cn(
-                            "mt-2 rounded-lg transition-all duration-200",
-                            isCurrentMatch && "ring-2 ring-info ring-offset-2 ring-offset-background",
-                            isAnyMatch && !isCurrentMatch && "ring-1 ring-info/30"
-                          )}
-                        >
-                          <MemoizedIntentPickerCard
-                            message={turn.message}
-                            sessionId={session.id}
-                            isInteractive={isInteractive}
-                            onSelectIntent={(intent) => {
-                              // Send message with selected intent
-                              onSendMessage(`I want to work on a ${intent}`)
-                            }}
-                          />
-                        </div>
-                      )
-                    }
-
-                    // Handoff-review turns - render inline review UI
-                    if (turn.type === 'handoff-review') {
-                      const isInteractive = !turns.slice(index + 1).some(t => t.type === 'user')
-                      return (
-                        <div
-                          key={turnKey}
-                          ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
-                          className={cn(
-                            "mt-2 rounded-lg transition-all duration-200",
-                            isCurrentMatch && "ring-2 ring-info ring-offset-2 ring-offset-background",
-                            isAnyMatch && !isCurrentMatch && "ring-1 ring-info/30"
-                          )}
-                        >
-                          <MemoizedHandoffReviewCard
-                            message={turn.message}
-                            sessionId={session.id}
-                            isInteractive={isInteractive}
-                            onReadyToPlan={() => {
-                              // Send message to proceed to planning
-                              onSendMessage('Ready to plan. Please create a detailed implementation plan.')
-                            }}
-                          />
-                        </div>
-                      )
-                    }
-
-                    // Extraction-progress turns - render spinner
-                    if (turn.type === 'extraction-progress') {
-                      return (
-                        <div
-                          key={turnKey}
-                          ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
-                        >
-                          <MemoizedExtractionCard message={turn.message} />
-                        </div>
-                      )
-                    }
-
-                    // Phase-indicator turns - render phase badge
-                    if (turn.type === 'phase-indicator') {
-                      return (
-                        <div
-                          key={turnKey}
-                          ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
-                        >
-                          <MemoizedPhaseIndicator message={turn.message} />
-                        </div>
-                      )
-                    }
-
                     // Check if this is the last response (for Accept Plan button visibility)
                     const isLastResponse = index === turns.length - 1 || !turns.slice(index + 1).some(t => t.type === 'user')
 
@@ -1456,6 +1393,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                         key={turnKey}
                         ref={el => { if (el) turnRefs.current.set(turnKey, el); else turnRefs.current.delete(turnKey) }}
                         className={cn(
+                          "pt-2",
                           "rounded-lg transition-all duration-200",
                           isCurrentMatch && "ring-2 ring-info ring-offset-2 ring-offset-background",
                           isAnyMatch && !isCurrentMatch && "ring-1 ring-info/30"
@@ -1575,22 +1513,6 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                     />
                   )
                 })()}
-                {/* Regenerate button - shown after turn completes */}
-                {!session.isProcessing && turns.length > 0 && (() => {
-                  const lastUserMsg = [...session.messages].reverse().find(m => m.role === 'user')
-                  if (!lastUserMsg) return null
-                  return (
-                    <div className="flex justify-center py-1">
-                      <button
-                        onClick={() => onSendMessage(lastUserMsg.content)}
-                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2.5 py-1 rounded-md hover:bg-muted"
-                      >
-                        <RefreshCw className="h-3 w-3" />
-                        Regenerate
-                      </button>
-                    </div>
-                  )
-                })()}
                 {/* Scroll Anchor: For auto-scroll to bottom */}
                 <div ref={messagesEndRef} />
               </div>
@@ -1609,7 +1531,6 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
             <ActiveOptionBadges
               ultrathinkEnabled={ultrathinkEnabled}
               onUltrathinkChange={onUltrathinkChange}
-              swarmMode={true}
               permissionMode={permissionMode}
               onPermissionModeChange={onPermissionModeChange}
               tasks={backgroundTasks}
@@ -1679,8 +1600,11 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
               sessionFolderPath={sessionFolderPath}
               sessionId={session.id}
               currentTodoState={session.todoState || 'todo'}
-              disableSend={disableSend}
+              disableSend={disableSend || connectionUnavailable}
+              connectionUnavailable={connectionUnavailable}
               isEmptySession={session.messages.length === 0}
+              currentConnection={session.llmConnection}
+              onConnectionChange={onConnectionChange}
               contextStatus={{
                 isCompacting: session.currentStatus?.statusType === 'compacting',
                 inputTokens: session.tokenUsage?.inputTokens,
@@ -1709,6 +1633,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
           numLines={overlayData.numLines}
           theme={isDark ? 'dark' : 'light'}
           error={overlayData.error}
+          command={overlayData.command}
         />
       )}
 

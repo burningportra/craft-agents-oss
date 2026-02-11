@@ -20,6 +20,7 @@ import { join, dirname, basename, relative } from 'path';
 import { homedir } from 'os';
 import type { FSWatcher } from 'fs';
 import { debug, perf } from '@craft-agent/shared/utils';
+import { readJsonFileSync } from '@craft-agent/shared/utils/files';
 import { loadStoredConfig, type StoredConfig } from '@craft-agent/shared/config';
 import {
   validateConfig,
@@ -119,6 +120,10 @@ export interface ConfigWatcherCallbacks {
   /** Called when labels config.json changes */
   onLabelConfigChange?: (workspaceId: string) => void;
 
+  // Hooks callbacks
+  /** Called when hooks.json changes */
+  onHooksConfigChange?: (workspaceId: string) => void;
+
   // Theme callbacks (app-level only)
   /** Called when app-level theme.json changes */
   onAppThemeChange?: (theme: ThemeOverrides | null) => void;
@@ -147,8 +152,7 @@ export function loadPreferences(): UserPreferences | null {
   }
 
   try {
-    const content = readFileSync(PREFERENCES_FILE, 'utf-8');
-    return JSON.parse(content) as UserPreferences;
+    return readJsonFileSync<UserPreferences>(PREFERENCES_FILE);
   } catch (error) {
     debug('[ConfigWatcher] Error loading preferences', error);
     return null;
@@ -316,8 +320,10 @@ export class ConfigWatcher {
    * Watch workspace directory recursively
    */
   private watchWorkspaceDir(): void {
+    debug('[ConfigWatcher] Setting up workspace watcher for:', this.workspaceDir);
     try {
       const watcher = watch(this.workspaceDir, { recursive: true }, (eventType, filename) => {
+        debug('[ConfigWatcher] RAW FILE EVENT:', eventType, filename);
         if (!filename) return;
 
         // Normalize path separators
@@ -326,7 +332,7 @@ export class ConfigWatcher {
       });
 
       this.watchers.push(watcher);
-      debug('[ConfigWatcher] Watching workspace recursively:', this.workspaceDir);
+      debug('[ConfigWatcher] Watcher created successfully for:', this.workspaceDir);
     } catch (error) {
       debug('[ConfigWatcher] Error watching workspace directory:', error);
     }
@@ -336,11 +342,19 @@ export class ConfigWatcher {
    * Handle a file change within the workspace directory
    */
   private handleWorkspaceFileChange(relativePath: string, eventType: string): void {
+    debug('[ConfigWatcher] File change detected:', relativePath, eventType);
     const parts = relativePath.split('/');
 
     // Workspace-level permissions.json
     if (relativePath === 'permissions.json') {
       this.debounce('workspace-permissions', () => this.handleWorkspacePermissionsChange());
+      return;
+    }
+
+    // Workspace-level hooks.json
+    if (relativePath === 'hooks.json') {
+      debug('[ConfigWatcher] hooks.json change detected - triggering reload');
+      this.debounce('hooks-config', () => this.handleHooksConfigChange());
       return;
     }
 
@@ -362,6 +376,9 @@ export class ConfigWatcher {
         this.debounce(`source-guide:${slug}`, () => this.handleSourceGuideChange(slug));
       } else if (file === 'permissions.json') {
         this.debounce(`source-permissions:${slug}`, () => this.handleSourcePermissionsChange(slug));
+      } else if (file && /^icon\.(svg|png|jpg|jpeg)$/i.test(file)) {
+        // Icon file changes trigger a source change (to update icon)
+        this.debounce(`source-icon:${slug}`, () => this.handleSourceConfigChange(slug));
       }
       return;
     }
@@ -846,6 +863,19 @@ export class ConfigWatcher {
   private handleLabelConfigChange(): void {
     debug('[ConfigWatcher] Labels config.json changed:', this.workspaceId);
     this.callbacks.onLabelConfigChange?.(this.workspaceId);
+  }
+
+  // ============================================================
+  // Hooks Handlers
+  // ============================================================
+
+  /**
+   * Handle hooks.json change.
+   * Notifies sessions to reload hook configuration.
+   */
+  private handleHooksConfigChange(): void {
+    debug('[ConfigWatcher] hooks.json changed:', this.workspaceId);
+    this.callbacks.onHooksConfigChange?.(this.workspaceId);
   }
 
   // ============================================================

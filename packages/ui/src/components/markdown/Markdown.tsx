@@ -7,10 +7,13 @@ import { CodeBlock, InlineCode } from './CodeBlock'
 import { MarkdownDiffBlock } from './MarkdownDiffBlock'
 import { MarkdownJsonBlock } from './MarkdownJsonBlock'
 import { MarkdownMermaidBlock } from './MarkdownMermaidBlock'
+import { MarkdownDatatableBlock } from './MarkdownDatatableBlock'
+import { MarkdownSpreadsheetBlock } from './MarkdownSpreadsheetBlock'
 import { preprocessLinks } from './linkify'
 import remarkCollapsibleSections from './remarkCollapsibleSections'
 import { CollapsibleSection } from './CollapsibleSection'
 import { useCollapsibleMarkdown } from './CollapsibleMarkdownContext'
+import { wrapWithSafeProxy } from './safe-components'
 
 /**
  * Render modes for markdown content:
@@ -185,6 +188,14 @@ function createComponents(
           if (match?.[1] === 'json') {
             return <MarkdownJsonBlock code={code} className="my-1" />
           }
+          // Datatable code blocks → sortable/filterable data table
+          if (match?.[1] === 'datatable') {
+            return <MarkdownDatatableBlock code={code} className="my-1" />
+          }
+          // Spreadsheet code blocks → Excel-style grid
+          if (match?.[1] === 'spreadsheet') {
+            return <MarkdownSpreadsheetBlock code={code} className="my-1" />
+          }
           // Mermaid code blocks → zinc-styled SVG diagram.
           // Hide the inline expand button when the mermaid block is the first
           // content in the message — TurnCard's own fullscreen button occupies
@@ -264,6 +275,14 @@ function createComponents(
         // JSON code blocks → interactive tree viewer
         if (match?.[1] === 'json') {
           return <MarkdownJsonBlock code={code} className="my-1" />
+        }
+        // Datatable code blocks → sortable/filterable data table
+        if (match?.[1] === 'datatable') {
+          return <MarkdownDatatableBlock code={code} className="my-1" />
+        }
+        // Spreadsheet code blocks → Excel-style grid
+        if (match?.[1] === 'spreadsheet') {
+          return <MarkdownSpreadsheetBlock code={code} className="my-1" />
         }
         // Mermaid code blocks → zinc-styled SVG diagram.
         // (Same first-block detection as minimal mode — see comment above.)
@@ -390,7 +409,7 @@ export function Markdown({
   }
 
   const components = React.useMemo(
-    () => createComponents(mode, onUrlClick, onFileClick, collapsible ? collapsibleContext : null, firstMermaidCodeRef, hideFirstMermaidExpand),
+    () => wrapWithSafeProxy(createComponents(mode, onUrlClick, onFileClick, collapsible ? collapsibleContext : null, firstMermaidCodeRef, hideFirstMermaidExpand)),
     [mode, onUrlClick, onFileClick, collapsible, collapsibleContext, hideFirstMermaidExpand]
   )
 

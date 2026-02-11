@@ -1,0 +1,6 @@
+{
+  "setup": [
+    "bun run electron:dev"
+  ],
+  "teardown": []
+}

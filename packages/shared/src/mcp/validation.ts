@@ -10,8 +10,7 @@ import { spawn, type ChildProcess } from 'child_process';
 import { getDefaultOptions } from '../agent/options.ts';
 import { CraftMcpClient } from './client.js';
 import { debug } from '../utils/debug.ts';
-import { DEFAULT_MODEL } from '../config/models.ts';
-import { resolveModelId } from '../config/storage.ts';
+import { getDefaultSummarizationModel } from '../config/models.ts';
 import { parseError, type AgentError } from '../agent/errors.ts';
 import { getLastApiError } from '../network-interceptor.ts';
 
@@ -24,7 +23,7 @@ export interface InvalidProperty {
 export interface McpValidationResult {
   success: boolean;
   error?: string;
-  errorType?: 'failed' | 'needs-auth' | 'pending' | 'invalid-schema' | 'unknown';
+  errorType?: 'failed' | 'needs-auth' | 'pending' | 'invalid-schema' | 'disabled' | 'unknown';
   /** Typed error for API/billing failures - display as ErrorBanner */
   typedError?: AgentError;
   serverInfo?: {
@@ -181,7 +180,7 @@ export async function validateMcpConnection(
       options: {
         ...getDefaultOptions(),
         mcpServers,
-        model: resolveModelId(config.model || DEFAULT_MODEL),
+        model: config.model || getDefaultSummarizationModel(),
         abortController,
       },
     });
@@ -385,11 +384,20 @@ export async function validateStdioMcpConnection(
       client = null;
     }
     if (childProcess && !childProcess.killed) {
-      childProcess.kill('SIGTERM');
+      // Platform-aware process termination (SIGTERM/SIGKILL don't exist on Windows)
+      if (process.platform === 'win32') {
+        childProcess.kill();
+      } else {
+        childProcess.kill('SIGTERM');
+      }
       // Force kill after 1s if still alive
       setTimeout(() => {
         if (childProcess && !childProcess.killed) {
-          childProcess.kill('SIGKILL');
+          if (process.platform === 'win32') {
+            childProcess.kill();
+          } else {
+            childProcess.kill('SIGKILL');
+          }
         }
       }, 1000);
     }

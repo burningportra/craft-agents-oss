@@ -5,7 +5,7 @@
  * when performing configuration tasks (sources, agents, permissions, etc.).
  *
  * Docs are stored at ~/.craft-agent/docs/ and synced from bundled assets.
- * Source content lives in packages/shared/assets/docs/*.md for easier editing.
+ * Source content lives in apps/electron/resources/docs/*.md for easier editing.
  */
 
 import { join } from 'path';
@@ -21,12 +21,12 @@ const DOCS_DIR = join(CONFIG_DIR, 'docs');
 let docsInitialized = false;
 
 // Resolve the bundled docs assets directory using the shared asset resolver.
-// Handles all environments: dev (monorepo source), bundled (dist/assets/docs),
+// Handles all environments: dev (resources/docs), bundled (dist/resources/docs),
 // and packaged Electron (setBundledAssetsRoot sets the base path at startup).
 function getAssetsDir(): string {
   return getBundledAssetsDir('docs')
     // Fallback: development path (will fail gracefully if files don't exist)
-    ?? join(process.cwd(), 'packages', 'shared', 'assets', 'docs');
+    ?? join(process.cwd(), 'resources', 'docs');
 }
 
 /**
@@ -39,7 +39,7 @@ function loadBundledDocs(): Record<string, string> {
   const docs: Record<string, string> = {};
 
   // Auto-discover all files in the bundled docs directory.
-  // No hardcoded list — any file dropped into packages/shared/assets/docs/ is synced automatically.
+  // No hardcoded list — any file dropped into resources/docs/ is synced automatically.
   let files: string[];
   try {
     files = existsSync(assetsDir) ? readdirSync(assetsDir) : [];
@@ -60,8 +60,21 @@ function loadBundledDocs(): Record<string, string> {
   return docs;
 }
 
-// Load docs at module initialization (one-time read)
-const BUNDLED_DOCS = loadBundledDocs();
+// Lazy-loaded bundled docs cache.
+// IMPORTANT: Must NOT load at module initialization because setBundledAssetsRoot()
+// hasn't been called yet. Loading eagerly causes empty docs on fresh install.
+let _bundledDocs: Record<string, string> | null = null;
+
+/**
+ * Get bundled docs, loading them lazily on first access.
+ * This ensures docs are loaded AFTER setBundledAssetsRoot() has been called.
+ */
+function getBundledDocs(): Record<string, string> {
+  if (_bundledDocs === null) {
+    _bundledDocs = loadBundledDocs();
+  }
+  return _bundledDocs;
+}
 
 /**
  * Get the docs directory path
@@ -94,8 +107,9 @@ export const DOC_REFS = {
   statuses: `${APP_ROOT}/docs/statuses.md`,
   labels: `${APP_ROOT}/docs/labels.md`,
   toolIcons: `${APP_ROOT}/docs/tool-icons.md`,
+  hooks: `${APP_ROOT}/docs/hooks.md`,
   mermaid: `${APP_ROOT}/docs/mermaid.md`,
-  llmTool: `${APP_ROOT}/docs/llm-tool.md`,
+  dataTables: `${APP_ROOT}/docs/data-tables.md`,
   docsDir: `${APP_ROOT}/docs/`,
 } as const;
 
@@ -129,18 +143,22 @@ export function initializeDocs(): void {
     mkdirSync(DOCS_DIR, { recursive: true });
   }
 
+  // Load bundled docs lazily (after setBundledAssetsRoot has been called)
+  const bundledDocs = getBundledDocs();
+
   // Always write bundled docs to disk on launch.
   // This ensures consistent behavior between debug and release modes —
   // docs are always up-to-date with the running version.
-  for (const [filename, content] of Object.entries(BUNDLED_DOCS)) {
+  for (const [filename, content] of Object.entries(bundledDocs)) {
     const docPath = join(DOCS_DIR, filename);
     writeFileSync(docPath, content, 'utf-8');
   }
 
-  debug(`[docs] Synced ${Object.keys(BUNDLED_DOCS).length} docs`);
+  debug(`[docs] Synced ${Object.keys(bundledDocs).length} docs`);
 }
 
-export { BUNDLED_DOCS };
+// Export the lazy getter for external access
+export { getBundledDocs };
 
 // Re-export source guides utilities (parsing only - bundled guides removed)
 export {

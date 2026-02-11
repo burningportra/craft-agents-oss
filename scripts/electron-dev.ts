@@ -5,18 +5,44 @@
 
 import { spawn, type Subprocess } from "bun";
 import { existsSync, rmSync, cpSync, readFileSync, statSync, mkdirSync } from "fs";
-import { join } from "path";
+import { join, basename } from "path";
 import * as esbuild from "esbuild";
 
 const ROOT_DIR = join(import.meta.dir, "..");
 const ELECTRON_DIR = join(ROOT_DIR, "apps/electron");
 const DIST_DIR = join(ELECTRON_DIR, "dist");
 
+// MCP server paths (for Codex sessions)
+const SESSION_SERVER_DIR = join(ROOT_DIR, "packages/session-mcp-server");
+const SESSION_SERVER_OUTPUT = join(SESSION_SERVER_DIR, "dist/index.js");
+const BRIDGE_SERVER_DIR = join(ROOT_DIR, "packages/bridge-mcp-server");
+const BRIDGE_SERVER_OUTPUT = join(BRIDGE_SERVER_DIR, "dist/index.js");
+
 // Platform-specific binary paths (bun creates .exe on Windows, no extension on Unix)
 const IS_WINDOWS = process.platform === "win32";
 const BIN_EXT = IS_WINDOWS ? ".exe" : "";
 const VITE_BIN = join(ROOT_DIR, `node_modules/.bin/vite${BIN_EXT}`);
 const ELECTRON_BIN = join(ROOT_DIR, `node_modules/.bin/electron${BIN_EXT}`);
+
+// Multi-instance detection (matches detect-instance.sh logic)
+// Detects instance number from folder name suffix (e.g., craft-agents-1 → instance 1)
+function detectInstance(): void {
+  // Don't override if already set (e.g., by sourcing detect-instance.sh first)
+  if (process.env.CRAFT_VITE_PORT) return;
+
+  const folderName = basename(ROOT_DIR);
+  const match = folderName.match(/-(\d+)$/);
+
+  if (match) {
+    const instanceNum = match[1];
+    process.env.CRAFT_INSTANCE_NUMBER = instanceNum;
+    process.env.CRAFT_VITE_PORT = `${instanceNum}173`;
+    process.env.CRAFT_APP_NAME = `Craft Agents [${instanceNum}]`;
+    process.env.CRAFT_CONFIG_DIR = join(process.env.HOME || "", `.craft-agent-${instanceNum}`);
+    process.env.CRAFT_DEEPLINK_SCHEME = `craftagents${instanceNum}`;
+    console.log(`🔢 Instance ${instanceNum} detected: port=${process.env.CRAFT_VITE_PORT}, config=${process.env.CRAFT_CONFIG_DIR}`);
+  }
+}
 
 // Load .env file if it exists
 function loadEnvFile(): void {
@@ -121,6 +147,45 @@ function copyResources(): void {
   }
 }
 
+// Build MCP servers for Codex sessions (one-time, no watch needed)
+async function buildMcpServers(): Promise<void> {
+  console.log("🌉 Building MCP servers for Codex sessions...");
+
+  // Ensure dist directories exist
+  const sessionDistDir = join(SESSION_SERVER_DIR, "dist");
+  const bridgeDistDir = join(BRIDGE_SERVER_DIR, "dist");
+  if (!existsSync(sessionDistDir)) mkdirSync(sessionDistDir, { recursive: true });
+  if (!existsSync(bridgeDistDir)) mkdirSync(bridgeDistDir, { recursive: true });
+
+  // Build both servers in parallel
+  const [sessionResult, bridgeResult] = await Promise.all([
+    runEsbuild(
+      "packages/session-mcp-server/src/index.ts",
+      "packages/session-mcp-server/dist/index.js",
+      {},
+      { packagesExternal: true }
+    ),
+    runEsbuild(
+      "packages/bridge-mcp-server/src/index.ts",
+      "packages/bridge-mcp-server/dist/index.js",
+      {},
+      { packagesExternal: true }
+    ),
+  ]);
+
+  if (!sessionResult.success) {
+    console.error("❌ Session MCP server build failed:", sessionResult.error);
+    process.exit(1);
+  }
+  console.log("✅ Session MCP server built");
+
+  if (!bridgeResult.success) {
+    console.error("❌ Bridge MCP server build failed:", bridgeResult.error);
+    process.exit(1);
+  }
+  console.log("✅ Bridge MCP server built");
+}
+
 // Get OAuth defines for esbuild API
 function getOAuthDefines(): Record<string, string> {
   const oauthVars = [
@@ -144,6 +209,10 @@ function getOAuthDefines(): Record<string, string> {
 function getElectronEnv(): Record<string, string> {
   const vitePort = process.env.CRAFT_VITE_PORT || "5173";
 
+  // Codex binary path is resolved at runtime by the binary-resolver module.
+  // It checks: CODEX_PATH env var > bundled binary > local dev fork > system PATH.
+  // You can override with CODEX_PATH env var if needed for debugging.
+
   return {
     ...process.env as Record<string, string>,
     VITE_DEV_SERVER_URL: `http://localhost:${vitePort}`,
@@ -158,7 +227,8 @@ function getElectronEnv(): Record<string, string> {
 async function runEsbuild(
   entryPoint: string,
   outfile: string,
-  defines: Record<string, string> = {}
+  defines: Record<string, string> = {},
+  options: { packagesExternal?: boolean } = {}
 ): Promise<{ success: boolean; error?: string }> {
   try {
     await esbuild.build({
@@ -168,7 +238,7 @@ async function runEsbuild(
       format: "cjs",
       outfile: join(ROOT_DIR, outfile),
       external: ["electron"],
-      packages: "external", // Mark all node_modules as external
+      ...(options.packagesExternal ? { packages: "external" as const } : {}),
       define: defines,
       logLevel: "warning",
     });
@@ -178,7 +248,11 @@ async function runEsbuild(
   }
 }
 
-// Verify a JavaScript file is syntactically valid
+// Verify a JavaScript file exists and has content.
+// Note: We don't use `node --check` because it evaluates module-level code,
+// which fails for Electron-specific packages like @sentry/electron that
+// require Electron's runtime. esbuild's successful build already guarantees
+// valid JavaScript syntax.
 async function verifyJsFile(filePath: string): Promise<{ valid: boolean; error?: string }> {
   if (!existsSync(filePath)) {
     return { valid: false, error: "File does not exist" };
@@ -188,20 +262,6 @@ async function verifyJsFile(filePath: string): Promise<{ valid: boolean; error?:
   const stats = statSync(filePath);
   if (stats.size === 0) {
     return { valid: false, error: "File is empty" };
-  }
-
-  // Use Node to syntax-check the file
-  const proc = spawn({
-    cmd: ["node", "--check", filePath],
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-
-  const stderr = await new Response(proc.stderr).text();
-  const exitCode = await proc.exited;
-
-  if (exitCode !== 0) {
-    return { valid: false, error: stderr || "Syntax error" };
   }
 
   return { valid: true };
@@ -241,6 +301,7 @@ async function main(): Promise<void> {
   console.log("🚀 Starting Electron dev environment...\n");
 
   // Setup
+  detectInstance();
   loadEnvFile();
   cleanViteCache();
 
@@ -250,6 +311,9 @@ async function main(): Promise<void> {
   }
 
   copyResources();
+
+  // Build MCP servers for Codex sessions
+  await buildMcpServers();
 
   const vitePort = process.env.CRAFT_VITE_PORT || "5173";
   const oauthDefines = getOAuthDefines();
@@ -350,7 +414,6 @@ async function main(): Promise<void> {
     format: "cjs",
     outfile: join(ROOT_DIR, "apps/electron/dist/main.cjs"),
     external: ["electron"],
-    packages: "external",
     define: oauthDefines,
     logLevel: "info",
   });
@@ -366,7 +429,6 @@ async function main(): Promise<void> {
     format: "cjs",
     outfile: join(ROOT_DIR, "apps/electron/dist/preload.cjs"),
     external: ["electron"],
-    packages: "external",
     logLevel: "info",
   });
   await preloadContext.watch();

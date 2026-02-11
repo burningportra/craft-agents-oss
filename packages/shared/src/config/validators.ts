@@ -16,7 +16,9 @@ import { z } from 'zod';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { CONFIG_DIR } from './paths.ts';
+import { safeJsonParse, readJsonFileSync } from '../utils/files.ts';
 import { EntityColorSchema } from '../colors/validate.ts';
+import { isValidProviderAuthCombination } from './llm-connections.ts';
 
 // ============================================================
 // Config Directory
@@ -59,14 +61,35 @@ const WorkspaceSchema = z.object({
   iconUrl: z.string().optional(),
 });
 
-const AuthTypeSchema = z.enum(['api_key', 'oauth_token']);
+// --- LLM Connection schema for config validation ---
+
+const LlmProviderTypeSchema = z.enum([
+  'anthropic', 'anthropic_compat', 'openai', 'openai_compat', 'bedrock', 'vertex',
+]);
+
+const LlmAuthTypeSchema = z.enum([
+  'api_key', 'api_key_with_endpoint', 'oauth', 'iam_credentials',
+  'bearer_token', 'service_account_file', 'environment', 'none',
+]);
+
+const LlmConnectionSchema = z.object({
+  slug: z.string().min(1),
+  name: z.string().min(1),
+  providerType: LlmProviderTypeSchema,
+  authType: LlmAuthTypeSchema,
+  baseUrl: z.string().optional(),
+  models: z.array(z.union([z.string(), z.object({ id: z.string() }).passthrough()])).optional(),
+  defaultModel: z.string().optional(),
+  createdAt: z.number(),
+  // Allow additional fields (codexPath, awsRegion, gcpProjectId, etc.)
+}).passthrough();
 
 export const StoredConfigSchema = z.object({
-  authType: AuthTypeSchema.optional(),
   workspaces: z.array(WorkspaceSchema).min(0),
   activeWorkspaceId: z.string().nullable(),
   activeSessionId: z.string().nullable(),
-  model: z.string().optional(),
+  llmConnections: z.array(LlmConnectionSchema).optional(),
+  defaultLlmConnection: z.string().optional(),
   // Note: tokenDisplay, showCost, cumulativeUsage, defaultPermissionMode removed
   // Permission mode and cyclable modes are now per-workspace in workspace config.json
 });
@@ -130,7 +153,7 @@ export function validateConfig(): ValidationResult {
   let content: unknown;
   try {
     const raw = readFileSync(CONFIG_FILE, 'utf-8');
-    content = JSON.parse(raw);
+    content = safeJsonParse(raw);
   } catch (e) {
     return {
       valid: false,
@@ -162,6 +185,49 @@ export function validateConfig(): ValidationResult {
           severity: 'error',
           suggestion: 'Set activeWorkspaceId to an existing workspace ID or null',
         });
+      }
+    }
+
+    // Validate LLM connections
+    if (config.llmConnections) {
+      const seenSlugs = new Set<string>();
+      for (const [i, conn] of config.llmConnections.entries()) {
+        // Check for duplicate slugs
+        if (seenSlugs.has(conn.slug)) {
+          errors.push({
+            file: 'config.json',
+            path: `llmConnections[${i}].slug`,
+            message: `Duplicate connection slug '${conn.slug}'`,
+            severity: 'error',
+            suggestion: 'Each connection must have a unique slug',
+          });
+        }
+        seenSlugs.add(conn.slug);
+
+        // Validate provider/auth combination
+        if (!isValidProviderAuthCombination(conn.providerType as any, conn.authType as any)) {
+          warnings.push({
+            file: 'config.json',
+            path: `llmConnections[${i}]`,
+            message: `Invalid provider/auth combination: providerType='${conn.providerType}' with authType='${conn.authType}'`,
+            severity: 'warning',
+            suggestion: 'Check supported auth types for this provider',
+          });
+        }
+      }
+
+      // Validate defaultLlmConnection references an existing connection
+      if (config.defaultLlmConnection) {
+        const exists = config.llmConnections.some(c => c.slug === config.defaultLlmConnection);
+        if (!exists) {
+          warnings.push({
+            file: 'config.json',
+            path: 'defaultLlmConnection',
+            message: `Default LLM connection '${config.defaultLlmConnection}' does not exist in llmConnections array`,
+            severity: 'warning',
+            suggestion: 'Set defaultLlmConnection to an existing connection slug',
+          });
+        }
       }
     }
 
@@ -199,7 +265,7 @@ export function validatePreferences(): ValidationResult {
   let content: unknown;
   try {
     const raw = readFileSync(PREFERENCES_FILE, 'utf-8');
-    content = JSON.parse(raw);
+    content = safeJsonParse(raw);
   } catch (e) {
     return {
       valid: false,
@@ -266,11 +332,12 @@ export function validateAll(workspaceId?: string, workspaceRoot?: string): Valid
     results.push(validateAllSources(workspaceId));
   }
 
-  // Include skill, status, label, and permissions validation if workspaceRoot is provided
+  // Include skill, status, label, hooks, and permissions validation if workspaceRoot is provided
   if (workspaceRoot) {
     results.push(validateAllSkills(workspaceRoot));
     results.push(validateStatuses(workspaceRoot));
     results.push(validateLabels(workspaceRoot));
+    results.push(validateHooks(workspaceRoot));
     results.push(validateAllPermissions(workspaceRoot));
   }
 
@@ -345,6 +412,31 @@ const LocalSourceConfigSchema = z.object({
   format: z.string().optional(),
 });
 
+// Source brand and action card schemas
+const SourceCardActionHandlerSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('api'), method: z.string(), path: z.string() }),
+  z.object({ type: z.literal('mcp'), tool: z.string() }),
+  z.object({ type: z.literal('copy') }),
+  z.object({ type: z.literal('open'), urlTemplate: z.string() }),
+]);
+
+const SourceCardActionSchema = z.object({
+  label: z.string().min(1),
+  variant: z.enum(['primary', 'secondary']),
+  handler: SourceCardActionHandlerSchema,
+});
+
+const SourceCardDefinitionSchema = z.object({
+  type: z.string().min(1),
+  label: z.string().min(1),
+  icon: z.string().min(1),
+  actions: z.array(SourceCardActionSchema),
+});
+
+const SourceBrandSchema = z.object({
+  color: EntityColorSchema.optional(),
+});
+
 export const FolderSourceConfigSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -355,6 +447,8 @@ export const FolderSourceConfigSchema = z.object({
   mcp: McpSourceConfigSchema.optional(),
   api: ApiSourceConfigSchema.optional(),
   local: LocalSourceConfigSchema.optional(),
+  brand: SourceBrandSchema.optional(),
+  cards: z.array(SourceCardDefinitionSchema).optional(),
   isAuthenticated: z.boolean().optional(),
   lastTestedAt: z.number().int().min(0).optional(),
   // Timestamps are optional - manually created configs may not have them
@@ -397,7 +491,7 @@ export function validateSourceConfig(config: unknown): ValidationResult {
 export function validateSourceConfigContent(jsonString: string): ValidationResult {
   let content: unknown;
   try {
-    content = JSON.parse(jsonString);
+    content = safeJsonParse(jsonString);
   } catch (e) {
     return {
       valid: false,
@@ -452,7 +546,7 @@ export function validateSource(workspaceId: string, slug: string): ValidationRes
   let content: unknown;
   try {
     const raw = readFileSync(configPath, 'utf-8');
-    content = JSON.parse(raw);
+    content = safeJsonParse(raw);
   } catch (e) {
     return {
       valid: false,
@@ -888,7 +982,7 @@ export function validateStatusesContent(jsonString: string): ValidationResult {
   // Parse JSON
   let content: unknown;
   try {
-    content = JSON.parse(jsonString);
+    content = safeJsonParse(jsonString);
   } catch (e) {
     return {
       valid: false,
@@ -1113,7 +1207,7 @@ export function validateLabelsContent(jsonString: string): ValidationResult {
   // Parse JSON
   let content: unknown;
   try {
-    content = JSON.parse(jsonString);
+    content = safeJsonParse(jsonString);
   } catch (e) {
     return {
       valid: false,
@@ -1241,6 +1335,7 @@ import {
   getSourcePermissionsPath,
   getAppPermissionsDir,
 } from '../agent/permissions-config.ts';
+import { validateHooksContent, validateHooks } from '../hooks-simple/index.ts';
 
 /**
  * Internal: Validate a single permissions.json file
@@ -1295,7 +1390,7 @@ export function validatePermissionsContent(jsonString: string, displayFile: stri
   // Parse JSON
   let content: unknown;
   try {
-    content = JSON.parse(jsonString);
+    content = safeJsonParse(jsonString);
   } catch (e) {
     return {
       valid: false,
@@ -1400,6 +1495,120 @@ export function validateAllPermissions(workspaceRoot: string): ValidationResult 
   };
 }
 
+/**
+ * Check if a permissions file at the given path is valid.
+ * Returns true if the file exists and passes schema validation.
+ */
+export function isValidPermissionsFile(filePath: string): boolean {
+  try {
+    const content = readFileSync(filePath, 'utf-8');
+    const result = validatePermissionsContent(content);
+    return result.valid;
+  } catch {
+    return false;
+  }
+}
+
+// ============================================================
+// Theme Validators
+// ============================================================
+
+const CSSColorSchema = z.string().min(1);
+
+/**
+ * Zod schema for preset theme files.
+ * Validates theme structure and requires at least one color property.
+ */
+export const PresetThemeSchema = z.object({
+  name: z.string().min(1, 'Theme name is required'),
+  description: z.string().optional(),
+  author: z.string().optional(),
+  license: z.string().optional(),
+  source: z.string().optional(),
+  supportedModes: z.array(z.enum(['light', 'dark'])).optional(),
+  // Semantic colors
+  background: CSSColorSchema.optional(),
+  foreground: CSSColorSchema.optional(),
+  accent: CSSColorSchema.optional(),
+  info: CSSColorSchema.optional(),
+  success: CSSColorSchema.optional(),
+  destructive: CSSColorSchema.optional(),
+  // Surface colors
+  paper: CSSColorSchema.optional(),
+  navigator: CSSColorSchema.optional(),
+  input: CSSColorSchema.optional(),
+  popover: CSSColorSchema.optional(),
+  popoverSolid: CSSColorSchema.optional(),
+  // Scenic mode
+  mode: z.enum(['solid', 'scenic']).optional(),
+  backgroundImage: z.string().optional(),
+  // Dark mode overrides
+  dark: z.object({}).passthrough().optional(),
+  // Shiki theme for syntax highlighting
+  shikiTheme: z.object({
+    light: z.string().optional(),
+    dark: z.string().optional(),
+  }).optional(),
+}).refine(
+  (data) => {
+    const colorProps = ['background', 'foreground', 'accent', 'info', 'success', 'destructive'];
+    return colorProps.some(prop => prop in data);
+  },
+  { message: 'Theme must have at least one color property (background, foreground, accent, info, success, or destructive)' }
+);
+
+/**
+ * Validate theme content from a JSON string (no disk reads).
+ * Used to check if an existing theme file is valid before deciding to overwrite.
+ */
+export function validateThemeContent(jsonString: string, displayFile: string = 'theme.json'): ValidationResult {
+  const errors: ValidationIssue[] = [];
+
+  // Parse JSON
+  let content: unknown;
+  try {
+    content = safeJsonParse(jsonString);
+  } catch (e) {
+    return {
+      valid: false,
+      errors: [{
+        file: displayFile,
+        path: '',
+        message: `Invalid JSON: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        severity: 'error',
+      }],
+      warnings: [],
+    };
+  }
+
+  // Validate schema
+  const result = PresetThemeSchema.safeParse(content);
+  if (!result.success) {
+    errors.push(...zodErrorToIssues(result.error, displayFile));
+    return { valid: false, errors, warnings: [] };
+  }
+
+  return {
+    valid: true,
+    errors: [],
+    warnings: [],
+  };
+}
+
+/**
+ * Check if a theme file at the given path is valid.
+ * Returns true if the file exists and passes schema validation.
+ */
+export function isValidThemeFile(filePath: string): boolean {
+  try {
+    const content = readFileSync(filePath, 'utf-8');
+    const result = validateThemeContent(content);
+    return result.valid;
+  } catch {
+    return false;
+  }
+}
+
 // ============================================================
 // Tool Icons Validators
 // ============================================================
@@ -1442,7 +1651,7 @@ export function validateToolIconsContent(jsonString: string): ValidationResult {
   // Parse JSON
   let content: unknown;
   try {
-    content = JSON.parse(jsonString);
+    content = safeJsonParse(jsonString);
   } catch (e) {
     return {
       valid: false,
@@ -1564,7 +1773,7 @@ export function validateToolIcons(): ValidationResult {
 
   // Filesystem-specific check: verify referenced icon files exist
   try {
-    const parsed = JSON.parse(raw);
+    const parsed = safeJsonParse(raw) as Record<string, unknown>;
     if (parsed.tools && Array.isArray(parsed.tools)) {
       for (const tool of parsed.tools) {
         if (tool.icon) {
@@ -1647,7 +1856,7 @@ export function formatValidationResult(result: ValidationResult): string {
  * Result of detecting what type of config file a path corresponds to.
  */
 export interface ConfigFileDetection {
-  type: 'source' | 'skill' | 'statuses' | 'labels' | 'permissions' | 'tool-icons';
+  type: 'source' | 'skill' | 'statuses' | 'labels' | 'permissions' | 'tool-icons' | 'hooks';
   /** Slug of the source or skill (if applicable) */
   slug?: string;
   /** Display file path for error messages */
@@ -1699,6 +1908,11 @@ export function detectConfigFileType(filePath: string, workspaceRootPath: string
   // Match: labels/config.json
   if (relativePath === 'labels/config.json') {
     return { type: 'labels', displayFile: 'labels/config.json' };
+  }
+
+  // Match: hooks.json (workspace-level)
+  if (relativePath === 'hooks.json') {
+    return { type: 'hooks', displayFile: 'hooks.json' };
   }
 
   // Match: permissions.json (workspace-level)
@@ -1760,6 +1974,8 @@ export function validateConfigFileContent(
       return validateStatusesContent(content);
     case 'labels':
       return validateLabelsContent(content);
+    case 'hooks':
+      return validateHooksContent(content);
     case 'permissions':
       return validatePermissionsContent(content, detection.displayFile);
     case 'tool-icons':
