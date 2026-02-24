@@ -13,6 +13,18 @@ export const isDebugMode = !app?.isPackaged || process.argv.includes('--debug')
 
 // Configure transports based on debug mode
 if (isDebugMode) {
+  const formatLogValue = (value: unknown): string => {
+    if (value instanceof Error) {
+      return `${value.name}: ${value.message}${value.stack ? `\n${value.stack}` : ''}`
+    }
+
+    if (typeof value === 'object') {
+      return JSON.stringify(value)
+    }
+
+    return String(value)
+  }
+
   // JSON format for file (agent-parseable)
   // Note: format expects (params: FormatParams) => any[], where params.message has the LogMessage fields
   log.transports.file.format = ({ message }) => [
@@ -20,7 +32,7 @@ if (isDebugMode) {
       timestamp: message.date.toISOString(),
       level: message.level,
       scope: message.scope,
-      message: message.data,
+      message: message.data.map(formatLogValue),
     }),
   ]
 
@@ -32,7 +44,7 @@ if (isDebugMode) {
     const scope = message.scope ? `[${message.scope}]` : ''
     const level = message.level.toUpperCase().padEnd(5)
     const data = message.data
-      .map((d: unknown) => (typeof d === 'object' ? JSON.stringify(d) : String(d)))
+      .map((d: unknown) => formatLogValue(d))
       .join(' ')
     return [`${message.date.toISOString()} ${level} ${scope} ${data}`]
   }

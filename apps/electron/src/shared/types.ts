@@ -270,6 +270,54 @@ export interface GitBashStatus {
 }
 
 /**
+ * Git repository info used by flow-next project onboarding and add-project flow.
+ */
+export interface GitInfo {
+  branch: string
+  remote: string
+  lastCommit: string
+}
+
+/**
+ * Flow-next project status values.
+ */
+export type FlowProjectStatus = 'needs-setup' | 'initialized' | 'error'
+
+/**
+ * Flow-next project metadata persisted in renderer-local state.
+ */
+export interface RegisteredFlowProject {
+  path: string
+  name: string
+  addedAt: number
+}
+
+/**
+ * Current active flow project selector state.
+ */
+export interface ActiveFlowProject {
+  path: string | null
+  flowStatus: FlowProjectStatus
+  error?: string
+  gitInfo?: GitInfo
+}
+
+/**
+ * Serialized UI state saved in each flow workspace directory.
+ */
+export interface FlowUiState {
+  [key: string]: unknown
+}
+
+/**
+ * Minimal flow project context used by the onboarding project picker.
+ */
+export interface FlowProjectContext {
+  name: string
+  description?: string
+}
+
+/**
  * File attachment for sending with messages
  * Matches the FileAttachment interface from src/utils/files.ts
  */
@@ -635,6 +683,7 @@ export const IPC_CHANNELS = {
   // System
   GET_VERSIONS: 'system:versions',
   GET_HOME_DIR: 'system:homeDir',
+  GET_CWD: 'system:getCwd',
   IS_DEBUG_MODE: 'system:isDebugMode',
 
   // Auto-update
@@ -839,6 +888,8 @@ export const IPC_CHANNELS = {
 
   // Git operations
   GET_GIT_BRANCH: 'git:getBranch',
+  GET_GIT_INFO: 'git:getInfo',
+  GET_GIT_ROOT: 'git:getRoot',
 
   // Git Bash (Windows)
   GITBASH_CHECK: 'gitbash:check',
@@ -876,6 +927,10 @@ export const IPC_CHANNELS = {
   FLOW_EPIC_CHAT_SEND: 'flow:epic:chatSend',
   FLOW_EPIC_CHAT_ABORT: 'flow:epic:chatAbort',
   FLOW_SHOW_NOTIFICATION: 'flow:showNotification',
+  FLOW_CHANGED: 'flow:changed',
+  FLOW_EPIC_CHAT_STATUS: 'flow:epic-chat-status',
+  FLOW_EPIC_PLAN_STATUS: 'flow:epic:plan-status',
+  FLOW_NOTIFICATION_NAVIGATE: 'flow:notification-navigate',
   FLOW_PROJECT_REGISTER: 'flow:project:register',
   FLOW_PROJECT_UNREGISTER: 'flow:project:unregister',
   FLOW_PROJECT_LIST: 'flow:project:list',
@@ -962,6 +1017,7 @@ export interface ElectronAPI {
   // System
   getVersions(): { node: string; chrome: string; electron: string }
   getHomeDir(): Promise<string>
+  getCwd(): Promise<string>
   isDebugMode(): Promise<boolean>
 
   // Auto-update
@@ -1172,6 +1228,8 @@ export interface ElectronAPI {
 
   // Git operations
   getGitBranch(dirPath: string): Promise<string | null>
+  getGitInfo(dirPath: string): Promise<GitInfo | null>
+  getGitRoot(dirPath: string): Promise<string | null>
 
   // Git Bash (Windows)
   checkGitBash(): Promise<GitBashStatus>
@@ -1193,6 +1251,49 @@ export interface ElectronAPI {
   menuCopy(): Promise<void>
   menuPaste(): Promise<void>
   menuSelectAll(): Promise<void>
+
+  // Flow (task management)
+  flowEpicsList(workspaceRoot: string): Promise<any>
+  flowTasksList(workspaceRoot: string, epicId: string): Promise<any>
+  flowEpicShow(workspaceRoot: string, epicId: string): Promise<any>
+  flowTaskShow(workspaceRoot: string, taskId: string): Promise<any>
+  flowTaskStart(workspaceRoot: string, taskId: string): Promise<any>
+  flowTaskUpdateStatus(workspaceRoot: string, taskId: string, status: string): Promise<any>
+  flowInit(workspaceRoot: string): Promise<any>
+  flowEpicCreate(workspaceRoot: string, title: string, branch?: string): Promise<any>
+  flowEpicSetPlan(workspaceRoot: string, epicId: string, content: string): Promise<any>
+  flowEpicDelete(workspaceRoot: string, epicId: string): Promise<any>
+  flowEpicPlan(workspaceRoot: string, epicId: string): Promise<any>
+  flowEpicPlanApprove(workspaceRoot: string, epicId: string, tasks?: any[]): Promise<any>
+  flowEpicChatSend(
+    workspaceRoot: string,
+    epicId: string,
+    commandType: 'interview' | 'review' | 'chat',
+    message: string,
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    registeredProjects?: Array<{ path: string; name: string }>,
+  ): Promise<void>
+  flowEpicChatAbort(workspaceRoot: string, epicId: string): Promise<any>
+  flowShowNotification(params: {
+    type: string
+    title: string
+    body: string
+    workspaceId: string
+    epicId?: string
+    taskId?: string
+    priority?: 'high' | 'low'
+  }): Promise<void>
+  onFlowChanged(callback: (workspaceRoot: string, payload: { type: 'epic' | 'task' | 'config'; id?: string }) => void): () => void
+  onFlowEpicChatStatus<T = unknown>(callback: (event: T) => void): () => void
+  onFlowEpicPlanStatus<T = unknown>(callback: (event: T) => void): () => void
+  onFlowNotificationNavigate(callback: (data: { workspaceId: string; epicId?: string; taskId?: string }) => void): () => void
+  flowProjectRegister(projectPath: string, name: string): Promise<{ success: boolean; error?: string }>
+  flowProjectUnregister(projectPath: string): Promise<{ success: boolean; error?: string }>
+  flowProjectList(): Promise<RegisteredFlowProject[]>
+  flowProjectCheckStatus(projectPath: string): Promise<{ status: FlowProjectStatus; error?: string }>
+  flowUiStateRead(projectPath: string): Promise<FlowUiState | null>
+  flowUiStateWrite(projectPath: string, state: FlowUiState): Promise<{ success: boolean; error?: string }>
+  flowReadProjectContext(projectPath: string): Promise<FlowProjectContext | null>
 
   // LLM Connections (provider configurations)
   listLlmConnections(): Promise<LlmConnection[]>

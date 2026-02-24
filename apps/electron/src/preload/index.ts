@@ -90,6 +90,7 @@ const api: ElectronAPI = {
     electron: process.versions.electron
   }),
   getHomeDir: () => ipcRenderer.invoke(IPC_CHANNELS.GET_HOME_DIR),
+  getCwd: () => ipcRenderer.invoke(IPC_CHANNELS.GET_CWD),
   isDebugMode: () => ipcRenderer.invoke(IPC_CHANNELS.IS_DEBUG_MODE),
 
   // Auto-update
@@ -498,6 +499,10 @@ const api: ElectronAPI = {
   },
   getGitBranch: (dirPath: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.GET_GIT_BRANCH, dirPath),
+  getGitInfo: (dirPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_GIT_INFO, dirPath),
+  getGitRoot: (dirPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_GIT_ROOT, dirPath),
 
   // Git Bash (Windows)
   checkGitBash: () => ipcRenderer.invoke(IPC_CHANNELS.GITBASH_CHECK),
@@ -519,6 +524,101 @@ const api: ElectronAPI = {
   menuCopy: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_COPY),
   menuPaste: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_PASTE),
   menuSelectAll: () => ipcRenderer.invoke(IPC_CHANNELS.MENU_SELECT_ALL),
+
+  // Flow (task management)
+  flowEpicsList: (workspaceRoot: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPICS_LIST, workspaceRoot),
+  flowTasksList: (workspaceRoot: string, epicId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_TASKS_LIST, workspaceRoot, epicId),
+  flowEpicShow: (workspaceRoot: string, epicId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPIC_SHOW, workspaceRoot, epicId),
+  flowTaskShow: (workspaceRoot: string, taskId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_TASK_SHOW, workspaceRoot, taskId),
+  flowTaskStart: (workspaceRoot: string, taskId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_TASK_START, workspaceRoot, taskId),
+  flowTaskUpdateStatus: (workspaceRoot: string, taskId: string, status: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_TASK_UPDATE_STATUS, workspaceRoot, taskId, status),
+  flowInit: (workspaceRoot: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_INIT, workspaceRoot),
+  flowEpicCreate: (workspaceRoot: string, title: string, branch?: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPIC_CREATE, workspaceRoot, title, branch),
+  flowEpicSetPlan: (workspaceRoot: string, epicId: string, content: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPIC_SET_PLAN, workspaceRoot, epicId, content),
+  flowEpicDelete: (workspaceRoot: string, epicId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPIC_DELETE, workspaceRoot, epicId),
+  flowEpicPlan: (workspaceRoot: string, epicId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPIC_PLAN, workspaceRoot, epicId),
+  flowEpicPlanApprove: (workspaceRoot: string, epicId: string, tasks?: any[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPIC_PLAN_APPROVE, workspaceRoot, epicId, tasks),
+  flowEpicChatSend: (
+    workspaceRoot: string,
+    epicId: string,
+    commandType: 'interview' | 'review' | 'chat',
+    message: string,
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    registeredProjects?: Array<{ path: string; name: string }>,
+  ) => ipcRenderer.invoke(
+    IPC_CHANNELS.FLOW_EPIC_CHAT_SEND,
+    workspaceRoot,
+    epicId,
+    commandType,
+    message,
+    history,
+    registeredProjects,
+  ),
+  flowEpicChatAbort: (workspaceRoot: string, epicId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_EPIC_CHAT_ABORT, workspaceRoot, epicId),
+  flowShowNotification: (params: {
+    type: string
+    title: string
+    body: string
+    workspaceId: string
+    epicId?: string
+    taskId?: string
+    priority?: 'high' | 'low'
+  }) => ipcRenderer.invoke(IPC_CHANNELS.FLOW_SHOW_NOTIFICATION, params),
+  onFlowChanged: (callback: (workspaceRoot: string, payload: { type: 'epic' | 'task' | 'config'; id?: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, workspaceRoot: string, payload: { type: 'epic' | 'task' | 'config'; id?: string }) => {
+      callback(workspaceRoot, payload)
+    }
+    ipcRenderer.on(IPC_CHANNELS.FLOW_CHANGED, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.FLOW_CHANGED, handler)
+  },
+  onFlowEpicChatStatus: (callback: (event: any) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, event: any) => {
+      callback(event)
+    }
+    ipcRenderer.on(IPC_CHANNELS.FLOW_EPIC_CHAT_STATUS, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.FLOW_EPIC_CHAT_STATUS, handler)
+  },
+  onFlowEpicPlanStatus: (callback: (event: any) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, event: any) => {
+      callback(event)
+    }
+    ipcRenderer.on(IPC_CHANNELS.FLOW_EPIC_PLAN_STATUS, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.FLOW_EPIC_PLAN_STATUS, handler)
+  },
+  onFlowNotificationNavigate: (callback: (data: { workspaceId: string; epicId?: string; taskId?: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { workspaceId: string; epicId?: string; taskId?: string }) => {
+      callback(data)
+    }
+    ipcRenderer.on(IPC_CHANNELS.FLOW_NOTIFICATION_NAVIGATE, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.FLOW_NOTIFICATION_NAVIGATE, handler)
+  },
+  flowProjectRegister: (projectPath: string, name: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_PROJECT_REGISTER, projectPath, name),
+  flowProjectUnregister: (projectPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_PROJECT_UNREGISTER, projectPath),
+  flowProjectList: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_PROJECT_LIST),
+  flowProjectCheckStatus: (projectPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_PROJECT_CHECK_STATUS, projectPath),
+  flowUiStateRead: (projectPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_UI_STATE_READ, projectPath),
+  flowUiStateWrite: (projectPath: string, state: any) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_UI_STATE_WRITE, projectPath, state),
+  flowReadProjectContext: (projectPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.FLOW_READ_PROJECT_CONTEXT, projectPath),
 
   // LLM Connections (provider configurations)
   listLlmConnections: () => ipcRenderer.invoke(IPC_CHANNELS.LLM_CONNECTION_LIST),

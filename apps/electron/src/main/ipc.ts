@@ -23,6 +23,39 @@ import { MarkItDown } from 'markitdown-js'
 import { isUsableGitBashPath, validateGitBashPath } from './git-bash'
 
 /**
+ * Ensure IPC `handle` registration is resilient during dev/hot-reload cycles.
+ *
+ * Electron dev sessions can call `registerIpcHandlers` multiple times while
+ * keeping the main process alive. Without this guard, repeated `ipcMain.handle`
+ * calls for the same channel throw an "Attempted to register a second handler..."
+ * error. We dedupe handlers here and skip invalid/undefined channels.
+ */
+let isIpcHandleSafePatched = false
+
+function ensureSafeIpcHandle(): void {
+  if (isIpcHandleSafePatched) {
+    return
+  }
+
+  const originalHandle = ipcMain.handle.bind(ipcMain)
+
+  const safeHandle = (channel: unknown, listener: Parameters<typeof ipcMain.handle>[1]): ReturnType<typeof ipcMain.handle> => {
+    if (typeof channel !== 'string' || channel.length === 0) {
+      ipcLog.warn('Skipping invalid IPC channel registration in main process:', channel)
+      return
+    }
+
+      if (typeof (ipcMain as unknown as { removeHandler?: (channel: string) => void }).removeHandler === 'function') {
+      ipcMain.removeHandler(channel)
+    }
+    return originalHandle(channel, listener)
+  }
+
+  ;(ipcMain as unknown as { handle: typeof ipcMain.handle }).handle = safeHandle as typeof ipcMain.handle
+  isIpcHandleSafePatched = true
+}
+
+/**
  * Sanitizes a filename to prevent path traversal and filesystem issues.
  * Removes dangerous characters and limits length.
  */
@@ -496,6 +529,11 @@ async function validateFilePath(filePath: string): Promise<string> {
 }
 
 export function registerIpcHandlers(sessionManager: SessionManager, windowManager: WindowManager): void {
+  ensureSafeIpcHandle()
+
+  // Keep DEBUG_LOG listener idempotent across re-entry during development.
+  ipcMain.removeAllListeners(IPC_CHANNELS.DEBUG_LOG)
+
   // Get all sessions for the calling window's workspace
   // Waits for initialization to complete so sessions are never returned empty during startup
   ipcMain.handle(IPC_CHANNELS.GET_SESSIONS, async (event) => {
