@@ -58,27 +58,7 @@ export default defineConfig({
     dedupe: ['react', 'react-dom']
   },
   optimizeDeps: {
-    include: [
-      'react',
-      'react-dom',
-      'jotai',
-      'filtrex',
-      'pdfjs-dist',
-      // dagre-d3-es is ESM-native, no special handling needed
-      '@radix-ui/react-tooltip',
-      'react-markdown',
-      'rehype-raw',
-      'remark-gfm',
-      'shiki',
-      'linkify-it',
-      'unist-util-visit',
-      '@pierre/diffs',
-      '@pierre/diffs/react',
-      '@uiw/react-json-view',
-      '@uiw/react-json-view/vscode',
-      '@uiw/react-json-view/githubLight',
-      'react-pdf',
-    ],
+    include: ['react', 'react-dom', 'jotai', 'pdfjs-dist'],
     exclude: ['@craft-agent/ui'],
     esbuildOptions: {
       supported: { 'top-level-await': true },

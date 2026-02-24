@@ -312,7 +312,7 @@ Or configure manually in `~/.craft-agent/workspaces/{id}/hooks.json`:
 - **Command hooks** — run shell commands with event data as environment variables (`$CRAFT_LABEL`, `$CRAFT_SESSION_ID`, etc.)
 - **Prompt hooks** — create a new agent session with a prompt (supports `@mentions` for sources and skills)
 
-**Supported events:** `LabelAdd`, `LabelRemove`, `PermissionModeChange`, `FlagChange`, `TodoStateChange`, `SchedulerTick`, `PreToolUse`, `PostToolUse`, `SessionStart`, `SessionEnd`, and more.
+**Supported events:** `LabelAdd`, `LabelRemove`, `PermissionModeChange`, `FlagChange`, `SessionStatusChange`, `SchedulerTick`, `PreToolUse`, `PostToolUse`, `SessionStart`, `SessionEnd`, and more.
 
 See the [Hooks documentation](https://agents.craft.do/docs/hooks/overview) for the full reference.
 
@@ -345,6 +345,32 @@ craftagents://action/new-chat                  # Create new session
 | UI | [shadcn/ui](https://ui.shadcn.com/) + Tailwind CSS v4 |
 | Build | esbuild (main) + Vite (renderer) |
 | Credentials | AES-256-GCM encrypted file storage |
+
+## Troubleshooting
+
+### Debug Mode
+
+To launch the packaged app with verbose logging enabled, use `-- --debug` (note the double dash separator):
+
+**macOS:**
+```bash
+/Applications/Craft\ Agents.app/Contents/MacOS/Craft\ Agents -- --debug
+```
+
+**Windows (PowerShell):**
+```powershell
+& "$env:LOCALAPPDATA\Programs\@craft-agentelectron\Craft Agents.exe" -- --debug
+```
+
+**Linux:**
+```bash
+./craft-agents -- --debug
+```
+
+Logs are written to:
+- **macOS:** `~/Library/Logs/@craft-agent/electron/main.log`
+- **Windows:** `%APPDATA%\@craft-agent\electron\logs\main.log`
+- **Linux:** `~/.config/@craft-agent/electron/logs/main.log`
 
 ## License
 

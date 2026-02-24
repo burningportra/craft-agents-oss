@@ -15,7 +15,7 @@ export type AppEvent =
   | 'LabelConfigChange'
   | 'PermissionModeChange'
   | 'FlagChange'
-  | 'TodoStateChange'
+  | 'SessionStatusChange'
   | 'SchedulerTick';
 
 /** Agent events - passed to Claude SDK */
@@ -38,7 +38,7 @@ export type HookEvent = AppEvent | AgentEvent;
 
 export const APP_EVENTS: AppEvent[] = [
   'LabelAdd', 'LabelRemove', 'LabelConfigChange',
-  'PermissionModeChange', 'FlagChange', 'TodoStateChange', 'SchedulerTick'
+  'PermissionModeChange', 'FlagChange', 'SessionStatusChange', 'SchedulerTick'
 ];
 
 export const AGENT_EVENTS: AgentEvent[] = [
@@ -171,6 +171,7 @@ export interface SdkHookInput {
   tool_name?: string;
   tool_input?: Record<string, unknown>;
   tool_response?: string;
+  tool_use_id?: string;
   // Session events
   source?: string;  // startup, resume, clear, compact
   model?: string;
@@ -216,7 +217,7 @@ export interface SessionMetadataSnapshot {
   permissionMode?: string;
   labels?: string[];
   isFlagged?: boolean;
-  todoState?: string;
+  sessionStatus?: string;
   /** Session name (user-defined or auto-generated) */
   sessionName?: string;
 }

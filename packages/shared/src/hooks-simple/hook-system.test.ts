@@ -2,7 +2,7 @@
  * Tests for HookSystem facade
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -186,7 +186,7 @@ describe('HookSystem', () => {
         workspaceId: 'test-workspace',
       });
 
-      const emitSpy = vi.spyOn(system.eventBus, 'emit');
+      const emitSpy = spyOn(system.eventBus, 'emit');
 
       const events = await system.updateSessionMetadata('session-1', {
         permissionMode: 'execute',
@@ -208,7 +208,7 @@ describe('HookSystem', () => {
         workspaceId: 'test-workspace',
       });
 
-      const emitSpy = vi.spyOn(system.eventBus, 'emit');
+      const emitSpy = spyOn(system.eventBus, 'emit');
 
       const events = await system.updateSessionMetadata('session-1', {
         labels: ['label-1', 'label-2'],
@@ -236,7 +236,7 @@ describe('HookSystem', () => {
         labels: ['label-1', 'label-2'],
       });
 
-      const emitSpy = vi.spyOn(system.eventBus, 'emit');
+      const emitSpy = spyOn(system.eventBus, 'emit');
 
       const events = await system.updateSessionMetadata('session-1', {
         labels: ['label-1'], // label-2 removed
@@ -256,7 +256,7 @@ describe('HookSystem', () => {
         workspaceId: 'test-workspace',
       });
 
-      const emitSpy = vi.spyOn(system.eventBus, 'emit');
+      const emitSpy = spyOn(system.eventBus, 'emit');
 
       const events = await system.updateSessionMetadata('session-1', {
         isFlagged: true,
@@ -270,24 +270,24 @@ describe('HookSystem', () => {
       await system.dispose();
     });
 
-    it('should emit TodoStateChange event', async () => {
+    it('should emit SessionStatusChange event', async () => {
       const system = new HookSystem({
         workspaceRootPath: tempDir,
         workspaceId: 'test-workspace',
       });
 
       system.setInitialSessionMetadata('session-1', {
-        todoState: 'todo',
+        sessionStatus: 'todo',
       });
 
-      const emitSpy = vi.spyOn(system.eventBus, 'emit');
+      const emitSpy = spyOn(system.eventBus, 'emit');
 
       const events = await system.updateSessionMetadata('session-1', {
-        todoState: 'done',
+        sessionStatus: 'done',
       });
 
-      expect(events).toContain('TodoStateChange');
-      expect(emitSpy).toHaveBeenCalledWith('TodoStateChange', expect.objectContaining({
+      expect(events).toContain('SessionStatusChange');
+      expect(emitSpy).toHaveBeenCalledWith('SessionStatusChange', expect.objectContaining({
         oldState: 'todo',
         newState: 'done',
       }));
@@ -307,7 +307,7 @@ describe('HookSystem', () => {
         isFlagged: false,
       });
 
-      const emitSpy = vi.spyOn(system.eventBus, 'emit');
+      const emitSpy = spyOn(system.eventBus, 'emit');
 
       const events = await system.updateSessionMetadata('session-1', {
         permissionMode: 'explore',
@@ -368,7 +368,7 @@ describe('HookSystem', () => {
         workspaceId: 'test-workspace',
       });
 
-      const emitSpy = vi.spyOn(system.eventBus, 'emit');
+      const emitSpy = spyOn(system.eventBus, 'emit');
 
       await system.emitLabelConfigChange();
 

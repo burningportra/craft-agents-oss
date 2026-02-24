@@ -676,7 +676,7 @@ async function testMcpConnection(
       if (source.mcp.args?.length) {
         lines.push(`  Args: ${source.mcp.args.join(' ')}`);
       }
-      lines.push('  (Full validation requires runtime test)');
+      lines.push('  Connection test not available in this context — call the source\'s MCP tools directly to verify');
       success = true; // Config looks ok
     } else {
       hasError = true;
@@ -720,7 +720,7 @@ async function testMcpConnection(
     } else {
       // Basic URL check
       lines.push(`ℹ MCP source URL: ${source.mcp.url}`);
-      lines.push('  (Full MCP connection test requires runtime validation)');
+      lines.push('  Connection test not available in this context — call the source\'s MCP tools directly to verify');
       success = true; // Config looks ok
     }
   } else {
@@ -776,8 +776,12 @@ async function checkAuthStatus(
   let hasWarning = false;
 
   if (source.isAuthenticated) {
-    // Verify actual token if credential manager available
-    if (ctx.credentialManager) {
+    // In Codex context (no validateMcpConnection), MCP source credentials are delivered
+    // via config.toml headers, not the credential cache. Skip token verification to avoid
+    // false "token missing" warnings from the file-based cache.
+    if (source.type === 'mcp' && !ctx.validateMcpConnection) {
+      lines.push('✓ Source is authenticated');
+    } else if (ctx.credentialManager) {
       const workspaceId = basename(ctx.workspacePath) || '';
       const loadedSource = {
         config: source,
@@ -791,9 +795,18 @@ async function checkAuthStatus(
         if (token) {
           lines.push('✓ Source is authenticated (token valid)');
         } else {
-          hasWarning = true;
-          lines.push('⚠ Source marked authenticated but token missing/expired');
-          lines.push('  Re-authenticate to refresh credentials');
+          // Token missing or expired — attempt refresh before reporting failure.
+          // OAuth tokens are short-lived (typically 1h) and frequently expired in the
+          // credential store between uses. The normal connection pipeline refreshes
+          // them proactively, so source_test should too.
+          const refreshed = await ctx.credentialManager.refresh(loadedSource);
+          if (refreshed) {
+            lines.push('✓ Source is authenticated (token refreshed)');
+          } else {
+            hasWarning = true;
+            lines.push('⚠ Source marked authenticated but token missing or refresh failed');
+            lines.push('  Re-authenticate to refresh credentials');
+          }
         }
       } catch {
         lines.push('✓ Source is authenticated');
