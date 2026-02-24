@@ -869,6 +869,30 @@ export const IPC_CHANNELS = {
   MENU_COPY: 'menu:copy',
   MENU_PASTE: 'menu:paste',
   MENU_SELECT_ALL: 'menu:selectAll',
+
+  // Flow (task management)
+  FLOW_EPICS_LIST: 'flow:epics:list',
+  FLOW_TASKS_LIST: 'flow:tasks:list',
+  FLOW_EPIC_SHOW: 'flow:epic:show',
+  FLOW_TASK_SHOW: 'flow:task:show',
+  FLOW_TASK_START: 'flow:task:start',
+  FLOW_TASK_UPDATE_STATUS: 'flow:task:updateStatus',
+  FLOW_INIT: 'flow:init',
+  FLOW_EPIC_CREATE: 'flow:epic:create',
+  FLOW_EPIC_SET_PLAN: 'flow:epic:setPlan',
+  FLOW_EPIC_DELETE: 'flow:epic:delete',
+  FLOW_EPIC_PLAN: 'flow:epic:plan',
+  FLOW_EPIC_PLAN_APPROVE: 'flow:epic:planApprove',
+  FLOW_EPIC_CHAT_SEND: 'flow:epic:chatSend',
+  FLOW_EPIC_CHAT_ABORT: 'flow:epic:chatAbort',
+  FLOW_SHOW_NOTIFICATION: 'flow:showNotification',
+  FLOW_PROJECT_REGISTER: 'flow:project:register',
+  FLOW_PROJECT_UNREGISTER: 'flow:project:unregister',
+  FLOW_PROJECT_LIST: 'flow:project:list',
+  FLOW_PROJECT_CHECK_STATUS: 'flow:project:checkStatus',
+  FLOW_UI_STATE_READ: 'flow:uiState:read',
+  FLOW_UI_STATE_WRITE: 'flow:uiState:write',
+  FLOW_READ_PROJECT_CONTEXT: 'flow:readProjectContext',
 } as const
 
 // Re-import types for ElectronAPI
@@ -1343,6 +1367,15 @@ export interface SkillsNavigationState {
 }
 
 /**
+ * Tasks navigation state - shows TasksPage in main content
+ */
+export interface TasksNavigationState {
+  navigator: 'tasks'
+  /** Optional right sidebar panel state */
+  rightSidebar?: RightSidebarPanel
+}
+
+/**
  * Unified navigation state - single source of truth for all 3 panels
  *
  * From this state we can derive:
@@ -1355,6 +1388,7 @@ export type NavigationState =
   | SourcesNavigationState
   | SettingsNavigationState
   | SkillsNavigationState
+  | TasksNavigationState
 
 /**
  * Type guard to check if state is sessions navigation
@@ -1385,6 +1419,13 @@ export const isSkillsNavigation = (
 ): state is SkillsNavigationState => state.navigator === 'skills'
 
 /**
+ * Type guard to check if state is tasks navigation
+ */
+export const isTasksNavigation = (
+  state: NavigationState
+): state is TasksNavigationState => state.navigator === 'tasks'
+
+/**
  * Default navigation state - allSessions with no selection
  */
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
@@ -1411,6 +1452,9 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   }
   if (state.navigator === 'settings') {
     return `settings:${state.subpage}`
+  }
+  if (state.navigator === 'tasks') {
+    return 'tasks'
   }
   // Chats
   const f = state.filter
@@ -1458,6 +1502,9 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
       return { navigator: 'settings', subpage }
     }
   }
+
+  // Handle tasks
+  if (key === 'tasks') return { navigator: 'tasks' }
 
   // Handle sessions - parse filter and optional session
   const parseSessionsKey = (filterKey: string, sessionId?: string): NavigationState | null => {

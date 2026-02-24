@@ -45,6 +45,8 @@ export interface SidebarContextMenuConfig {
   onCreateEpic?: () => void
   /** Handler for "Close Panel" action - for tasks type */
   onClosePanel?: () => void
+  /** Handler for "Add View" action - for views type */
+  onAddView?: () => void
 }
 
 /**

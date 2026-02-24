@@ -34,7 +34,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'settings'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'settings' | 'tasks'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -58,7 +58,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'settings'
+  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'settings', 'tasks'
 ]
 
 /**
@@ -154,6 +154,11 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     return null
   }
 
+  // Tasks navigator
+  if (first === 'tasks') {
+    return { navigator: 'tasks', details: null }
+  }
+
   // Sessions navigator (allSessions, flagged, state)
   let sessionFilter: SessionFilter
   let detailsStartIndex: number
@@ -234,6 +239,10 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   if (parsed.navigator === 'skills') {
     if (!parsed.details) return 'skills'
     return `skills/skill/${parsed.details.id}`
+  }
+
+  if (parsed.navigator === 'tasks') {
+    return 'tasks'
   }
 
   // Sessions navigator
@@ -468,6 +477,11 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     }
   }
 
+  // Tasks
+  if (compound.navigator === 'tasks') {
+    return { navigator: 'tasks' }
+  }
+
   // Sessions
   const filter = compound.sessionFilter || { kind: 'allSessions' as const }
   if (compound.details) {
@@ -628,6 +642,10 @@ export function buildRouteFromNavigationState(state: NavigationState): string {
       return `skills/skill/${state.details.skillSlug}`
     }
     return 'skills'
+  }
+
+  if (state.navigator === 'tasks') {
+    return 'tasks'
   }
 
   // Sessions

@@ -157,6 +157,30 @@ async function buildMcpServers(): Promise<void> {
   if (!existsSync(sessionDistDir)) mkdirSync(sessionDistDir, { recursive: true });
   if (!existsSync(bridgeDistDir)) mkdirSync(bridgeDistDir, { recursive: true });
 
+  // Check if source files exist - if not, use pre-built files from resources
+  const sessionSrc = join(ROOT_DIR, "packages/session-mcp-server/src/index.ts");
+  const bridgeSrc = join(ROOT_DIR, "packages/bridge-mcp-server/src/index.ts");
+  
+  if (!existsSync(sessionSrc) || !existsSync(bridgeSrc)) {
+    console.log("📦 Source files not found, using pre-built MCP servers from resources...");
+    
+    // Copy pre-built files from resources
+    const sessionResource = join(ELECTRON_DIR, "resources/session-mcp-server/index.js");
+    const bridgeResource = join(ELECTRON_DIR, "resources/bridge-mcp-server/index.js");
+    
+    if (existsSync(sessionResource)) {
+      cpSync(sessionResource, SESSION_SERVER_OUTPUT, { force: true });
+      console.log("✅ Session MCP server copied from resources");
+    }
+    
+    if (existsSync(bridgeResource)) {
+      cpSync(bridgeResource, BRIDGE_SERVER_OUTPUT, { force: true });
+      console.log("✅ Bridge MCP server copied from resources");
+    }
+    
+    return;
+  }
+
   // Build both servers in parallel
   const [sessionResult, bridgeResult] = await Promise.all([
     runEsbuild(

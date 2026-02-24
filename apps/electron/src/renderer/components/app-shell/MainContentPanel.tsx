@@ -29,6 +29,7 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isTasksNavigation,
 } from '@/contexts/NavigationContext'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { extractLabelId } from '@craft-agent/shared/labels'
@@ -36,6 +37,9 @@ import type { TodoStateId } from '@/config/todo-states'
 import { SourceInfoPage, ChatPage } from '@/pages'
 import SkillInfoPage from '@/pages/SkillInfoPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
+
+// Lazy load TasksPage to avoid blocking app startup with heavy @xyflow/react import
+const TasksPage = React.lazy(() => import('@/pages/TasksPage').then(m => ({ default: m.TasksPage })))
 
 export interface MainContentPanelProps {
   /** Whether the app is in focused mode (single chat, no sidebar) */
@@ -183,6 +187,17 @@ export function MainContentPanel({
         <div className="flex items-center justify-center h-full text-muted-foreground">
           <p className="text-sm">No skills configured</p>
         </div>
+      </Panel>
+    )
+  }
+
+  // Tasks navigator - show tasks page (lazy loaded)
+  if (isTasksNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <React.Suspense fallback={<div className="flex items-center justify-center h-full text-muted-foreground">Loading tasks...</div>}>
+          <TasksPage />
+        </React.Suspense>
       </Panel>
     )
   }

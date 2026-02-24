@@ -26,6 +26,7 @@ import {
   HelpCircle,
   ExternalLink,
   Cake,
+  KanbanSquare,
 } from "lucide-react"
 import { PanelRightRounded } from "../icons/PanelRightRounded"
 import { PanelLeftRounded } from "../icons/PanelLeftRounded"
@@ -104,6 +105,7 @@ import {
   isSourcesNavigation,
   isSettingsNavigation,
   isSkillsNavigation,
+  isTasksNavigation,
   type NavigationState,
   type SessionFilter,
 } from "@/contexts/NavigationContext"
@@ -1575,6 +1577,11 @@ function AppShellContent({
     navigate(routes.view.skills())
   }, [])
 
+  // Handler for tasks view
+  const handleTasksClick = useCallback(() => {
+    navigate(routes.view.tasks())
+  }, [])
+
   // Handler for settings view
   const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {
     navigate(routes.view.settings(subpage))
@@ -1798,11 +1805,12 @@ function AppShellContent({
     // 3. Sources, Skills, Settings
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
+    result.push({ id: 'nav:tasks', type: 'nav', action: handleTasksClick })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
     result.push({ id: 'nav:whats-new', type: 'nav', action: handleWhatsNewClick })
 
     return result
-  }, [handleAllSessionsClick, handleFlaggedClick, handleArchivedClick, handleTodoStateClick, effectiveTodoStates, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleSettingsClick, handleWhatsNewClick])
+  }, [handleAllSessionsClick, handleFlaggedClick, handleArchivedClick, handleTodoStateClick, effectiveTodoStates, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleTasksClick, handleSettingsClick, handleWhatsNewClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -2259,6 +2267,19 @@ function AppShellContent({
                       contextMenu: {
                         type: 'skills',
                         onAddSkill: openAddSkill,
+                      },
+                    },
+                    // --- Tasks ---
+                    {
+                      id: "nav:tasks",
+                      title: "Tasks",
+                      icon: KanbanSquare,
+                      variant: isTasksNavigation(navState) ? "default" : "ghost",
+                      onClick: handleTasksClick,
+                      contextMenu: {
+                        type: 'tasks',
+                        onCreateEpic: () => setEpicWizardOpen(true),
+                        onClosePanel: () => setIsRightSidebarVisible(false),
                       },
                     },
                     // --- Separator ---

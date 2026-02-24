@@ -6,6 +6,8 @@
 
 export { default as ChatPage } from './ChatPage'
 export { default as SourceInfoPage } from './SourceInfoPage'
+// Tasks page - lazy loaded to avoid blocking app startup with heavy @xyflow/react import
+export { TasksPage } from './TasksPage'
 // Settings pages
 export {
   SettingsNavigator,
