@@ -130,7 +130,7 @@ export interface ValidatorInterface {
   validateStatuses(workspaceRootPath: string): import('./types.js').ValidationResult;
   validatePreferences(): import('./types.js').ValidationResult;
   validatePermissions(workspaceRootPath: string, sourceSlug?: string): import('./types.js').ValidationResult;
-  validateHooks(workspaceRootPath: string): import('./types.js').ValidationResult;
+  validateAutomations(workspaceRootPath: string): import('./types.js').ValidationResult;
   validateToolIcons(): import('./types.js').ValidationResult;
   validateAll(workspaceRootPath: string): import('./types.js').ValidationResult;
   validateSkill(workspaceRootPath: string, skillSlug: string): import('./types.js').ValidationResult;
@@ -166,6 +166,9 @@ export interface SessionToolContext {
 
   /** Path to session's plans folder */
   plansFolderPath: string;
+
+  /** Working directory (project root) for the session, if set */
+  workingDirectory?: string;
 
   // ============================================================
   // Callbacks (transport-agnostic)
@@ -282,6 +285,41 @@ export interface SessionToolContext {
    * Test a Google source (OAuth token validation).
    */
   testGoogleSource?(source: SourceConfig): Promise<ApiTestResult>;
+
+  // ============================================================
+  // Preferences (for update_user_preferences)
+  // ============================================================
+
+  /**
+   * Submit developer feedback. Injected by each backend:
+   * - Claude: writes JSON files to ~/.craft-agent/feedback/
+   * - Codex/Pi: could send over IPC or write directly
+   */
+  submitFeedback?(feedback: import('./types.ts').DeveloperFeedback): void;
+
+  /**
+   * Update user preferences. Injected by each backend:
+   * - Claude: calls updatePreferences() from config/preferences.ts
+   * - Codex/session-mcp-server: writes directly to preferences.json
+   * - Pi: calls updatePreferences() from config/preferences.ts
+   */
+  updatePreferences?(updates: Record<string, unknown>): void;
+
+  // ============================================================
+  // Session Paths (for transform_data / render_template)
+  // ============================================================
+
+  /**
+   * Absolute path to the session directory.
+   * Used by transform_data for resolving input files.
+   */
+  sessionPath?: string;
+
+  /**
+   * Absolute path to the session's data directory.
+   * Used by transform_data and render_template for output files.
+   */
+  dataPath?: string;
 }
 
 // ============================================================

@@ -14,7 +14,7 @@
 
 import type { SessionState, AgentEvent, ProcessResult } from './types'
 import { handleTextDelta, handleTextComplete } from './handlers/text'
-import { handleToolStart, handleToolResult, handleTaskBackgrounded, handleShellBackgrounded, handleTaskProgress } from './handlers/tool'
+import { handleToolStart, handleToolResult, handleTaskBackgrounded, handleShellBackgrounded, handleTaskProgress, handleTaskCompleted } from './handlers/tool'
 import {
   handleComplete,
   handleError,
@@ -41,6 +41,7 @@ import {
   handleSessionModelChanged,
   handleConnectionChanged,
   handleUserMessage,
+  handleMessageAnnotationsUpdated,
   handleSessionShared,
   handleSessionUnshared,
   handleAuthRequest,
@@ -96,6 +97,11 @@ export function processEvent(
 
     case 'task_progress': {
       const newState = handleTaskProgress(state, event)
+      return { state: newState, effects: [] }
+    }
+
+    case 'task_completed': {
+      const newState = handleTaskCompleted(state, event)
       return { state: newState, effects: [] }
     }
 
@@ -173,6 +179,9 @@ export function processEvent(
 
     case 'user_message':
       return handleUserMessage(state, event)
+
+    case 'message_annotations_updated':
+      return handleMessageAnnotationsUpdated(state, event)
 
     case 'session_shared':
       return handleSessionShared(state, event)

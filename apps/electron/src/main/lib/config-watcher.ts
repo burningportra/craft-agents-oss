@@ -36,6 +36,7 @@ import {
   sourceNeedsIconDownload,
   downloadSourceIcon,
 } from '@craft-agent/shared/sources';
+import { AUTOMATIONS_CONFIG_FILE } from '@craft-agent/shared/automations';
 import { permissionsConfigCache, getAppPermissionsDir } from '@craft-agent/shared/agent';
 import { getWorkspacePath, getWorkspaceSourcesPath, getWorkspaceSkillsPath } from '@craft-agent/shared/workspaces';
 import type { LoadedSkill } from '@craft-agent/shared/skills';
@@ -47,6 +48,7 @@ import {
 } from '@craft-agent/shared/statuses';
 import { loadAppTheme, loadPresetThemes, loadPresetTheme, getAppThemesDir } from '@craft-agent/shared/config';
 import type { ThemeOverrides, PresetTheme } from '@craft-agent/shared/config';
+import { readSessionHeader, type SessionHeader } from '@craft-agent/shared/sessions';
 
 // ============================================================
 // Constants
@@ -120,9 +122,9 @@ export interface ConfigWatcherCallbacks {
   /** Called when labels config.json changes */
   onLabelConfigChange?: (workspaceId: string) => void;
 
-  // Hooks callbacks
-  /** Called when hooks.json changes */
-  onHooksConfigChange?: (workspaceId: string) => void;
+  // Automations callbacks
+  /** Called when automations.json changes */
+  onAutomationsConfigChange?: (workspaceId: string) => void;
 
   // Theme callbacks (app-level only)
   /** Called when app-level theme.json changes */
@@ -131,6 +133,10 @@ export interface ConfigWatcherCallbacks {
   onPresetThemeChange?: (themeId: string, theme: PresetTheme | null) => void;
   /** Called when the preset themes list changes (add/remove files) */
   onPresetThemesListChange?: (themes: PresetTheme[]) => void;
+
+  // Session callbacks
+  /** Called when a session header changes (external edits to sessions/{id}/session.jsonl) */
+  onSessionMetadataChange?: (sessionId: string, header: SessionHeader) => void;
 
   // Error callbacks
   /** Called when a validation error occurs */
@@ -350,10 +356,21 @@ export class ConfigWatcher {
       return;
     }
 
-    // Workspace-level hooks.json
-    if (relativePath === 'hooks.json') {
-      debug('[ConfigWatcher] hooks.json change detected - triggering reload');
-      this.debounce('hooks-config', () => this.handleHooksConfigChange());
+    // Workspace-level automations config file
+    if (relativePath === AUTOMATIONS_CONFIG_FILE) {
+      debug('[ConfigWatcher] automations config change detected:', relativePath, '- triggering reload');
+      this.debounce('automations-config', () => this.handleAutomationsConfigChange());
+      return;
+    }
+
+    // Session metadata changes: sessions/{sessionId}/session.jsonl
+    if (parts[0] === 'sessions' && parts.length >= 3) {
+      const sessionId = parts[1]!; // Safe: checked parts.length >= 3
+      const file = parts[2];
+
+      if (file === 'session.jsonl') {
+        this.debounce(`session-metadata:${sessionId}`, () => this.handleSessionMetadataChange(sessionId));
+      }
       return;
     }
 
@@ -435,6 +452,27 @@ export class ConfigWatcher {
         return;
       }
     }
+  }
+
+  /**
+   * Handle session metadata (session.jsonl header) change.
+   */
+  private handleSessionMetadataChange(sessionId: string): void {
+    const sessionFile = join(this.workspaceDir, 'sessions', sessionId, 'session.jsonl');
+
+    // Session may have been deleted/rotated.
+    if (!existsSync(sessionFile)) {
+      debug('[ConfigWatcher] Session metadata file missing:', sessionFile);
+      return;
+    }
+
+    const header = readSessionHeader(sessionFile);
+    if (!header) {
+      debug('[ConfigWatcher] Failed to read session metadata header:', sessionFile);
+      return;
+    }
+
+    this.callbacks.onSessionMetadataChange?.(sessionId, header);
   }
 
   /**
@@ -865,16 +903,16 @@ export class ConfigWatcher {
   }
 
   // ============================================================
-  // Hooks Handlers
+  // Automations Handlers
   // ============================================================
 
   /**
-   * Handle hooks.json change.
-   * Notifies sessions to reload hook configuration.
+   * Handle automations.json change.
+   * Notifies sessions to reload automation configuration.
    */
-  private handleHooksConfigChange(): void {
-    debug('[ConfigWatcher] hooks.json changed:', this.workspaceId);
-    this.callbacks.onHooksConfigChange?.(this.workspaceId);
+  private handleAutomationsConfigChange(): void {
+    debug('[ConfigWatcher] automations config changed:', this.workspaceId);
+    this.callbacks.onAutomationsConfigChange?.(this.workspaceId);
   }
 
   // ============================================================

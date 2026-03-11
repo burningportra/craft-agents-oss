@@ -18,16 +18,16 @@
 import * as React from 'react'
 import {
   AppWindow,
+  CheckCheck,
   Settings2,
   Plus,
   Trash2,
   ExternalLink,
-  PanelLeftClose,
 } from 'lucide-react'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getDocUrl, type DocFeature } from '@craft-agent/shared/docs/doc-links'
 
-export type SidebarMenuType = 'allSessions' | 'flagged' | 'status' | 'sources' | 'skills' | 'labels' | 'views' | 'newSession' | 'tasks'
+export type SidebarMenuType = 'allSessions' | 'flagged' | 'status' | 'sources' | 'skills' | 'automations' | 'labels' | 'views' | 'newSession'
 
 export interface SidebarMenuProps {
   /** Type of sidebar item (determines available menu items) */
@@ -38,6 +38,8 @@ export interface SidebarMenuProps {
   labelId?: string
   /** Handler for "Configure Statuses" action - only for allSessions/status/flagged types */
   onConfigureStatuses?: () => void
+  /** Handler for "Mark All Read" action - only for allSessions type */
+  onMarkAllRead?: () => void
   /** Handler for "Configure Labels" action - receives labelId when triggered from a specific label */
   onConfigureLabels?: (labelId?: string) => void
   /** Handler for "Add New Label" action - creates a label (parentId = labelId if set) */
@@ -48,6 +50,8 @@ export interface SidebarMenuProps {
   onAddSource?: () => void
   /** Handler for "Add Skill" action - only for skills type */
   onAddSkill?: () => void
+  /** Handler for "Add Automation" action - only for automations type */
+  onAddAutomation?: () => void
   /** Source type filter for "Learn More" link - determines which docs page to open */
   sourceType?: 'api' | 'mcp' | 'local'
   /** Handler for "Edit Views" action - for views type */
@@ -56,10 +60,6 @@ export interface SidebarMenuProps {
   viewId?: string
   /** Handler for "Delete View" action */
   onDeleteView?: (id: string) => void
-  /** Handler for "Create Epic" action - for tasks type */
-  onCreateEpic?: () => void
-  /** Handler for "Close Panel" action - for tasks type */
-  onClosePanel?: () => void
 }
 
 /**
@@ -71,17 +71,17 @@ export function SidebarMenu({
   statusId,
   labelId,
   onConfigureStatuses,
+  onMarkAllRead,
   onConfigureLabels,
   onAddLabel,
   onDeleteLabel,
   onAddSource,
   onAddSkill,
+  onAddAutomation,
   sourceType,
   onConfigureViews,
   viewId,
   onDeleteView,
-  onCreateEpic,
-  onClosePanel,
 }: SidebarMenuProps) {
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem, Separator } = useMenuComponents()
@@ -96,13 +96,24 @@ export function SidebarMenu({
     )
   }
 
-  // All Sessions / Status / Flagged: show "Configure Statuses"
+  // All Sessions / Status / Flagged: show "Configure Statuses" (+ "Mark All Read" for allSessions)
   if ((type === 'allSessions' || type === 'status' || type === 'flagged') && onConfigureStatuses) {
     return (
-      <MenuItem onClick={onConfigureStatuses}>
-        <Settings2 className="h-3.5 w-3.5" />
-        <span className="flex-1">Configure Statuses</span>
-      </MenuItem>
+      <>
+        {type === 'allSessions' && onMarkAllRead && (
+          <>
+            <MenuItem onClick={onMarkAllRead}>
+              <CheckCheck className="h-3.5 w-3.5" />
+              <span className="flex-1">Mark All Read</span>
+            </MenuItem>
+            <Separator />
+          </>
+        )}
+        <MenuItem onClick={onConfigureStatuses}>
+          <Settings2 className="h-3.5 w-3.5" />
+          <span className="flex-1">Configure Statuses</span>
+        </MenuItem>
+      </>
     )
   }
 
@@ -203,25 +214,21 @@ export function SidebarMenu({
     )
   }
 
-  // Tasks: show "Create Epic" and "Close Panel"
-  if (type === 'tasks') {
+  // Automations: show "Add Automation" and "Learn More"
+  if (type === 'automations') {
     return (
       <>
-        {onCreateEpic && (
-          <MenuItem onClick={onCreateEpic}>
+        {onAddAutomation && (
+          <MenuItem onClick={onAddAutomation}>
             <Plus className="h-3.5 w-3.5" />
-            <span className="flex-1">Create Epic</span>
+            <span className="flex-1">Add Automation</span>
           </MenuItem>
         )}
-        {onClosePanel && (
-          <>
-            {onCreateEpic && <Separator />}
-            <MenuItem onClick={onClosePanel}>
-              <PanelLeftClose className="h-3.5 w-3.5" />
-              <span className="flex-1">Close Panel</span>
-            </MenuItem>
-          </>
-        )}
+        <Separator />
+        <MenuItem onClick={() => window.electronAPI.openUrl(getDocUrl('automations'))}>
+          <ExternalLink className="h-3.5 w-3.5" />
+          <span className="flex-1">Learn More about Automations</span>
+        </MenuItem>
       </>
     )
   }
